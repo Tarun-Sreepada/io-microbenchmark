@@ -120,6 +120,8 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
             exit(1);
         }
+        // fill the buffer with data
+        memset(buffers[i], 'A', params.page_size);
     }
 
     // Generate offsets
@@ -149,6 +151,8 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     uint64_t submitted = 0;
     uint64_t completed = 0;
 
+
+
     while (completed < params.io) {
         // Submit operations up to the queue depth
         while (submitted - completed < params.queue_depth && submitted < params.io) {
@@ -163,8 +167,6 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             if (params.read_or_write == "read") {
                 io_uring_prep_read(sqe, params.fd, buffers[index], params.page_size, offset);
             } else {
-                // For write, fill the buffer with data
-                memset(buffers[index], 'A', params.page_size);
                 io_uring_prep_write(sqe, params.fd, buffers[index], params.page_size, offset);
             }
 

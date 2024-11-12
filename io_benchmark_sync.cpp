@@ -100,11 +100,14 @@ void io_benchmark_thread(benchmark_params params, uint64_t thread_id) {
     uint64_t min_latency = std::numeric_limits<uint64_t>::max();
     uint64_t max_latency = 0;
     double total_latency = 0.0;  // Total latency in microseconds
+    ssize_t bytes;
+    memset(buf, 'A', params.page_size);
+
+
 
     for (uint64_t i = 0; i < params.io; ++i) {
         uint64_t offset = offsets[i];
         auto start = std::chrono::high_resolution_clock::now();
-        ssize_t bytes;
 
         if (params.read_or_write == "read") {
             bytes = pread(fd, buf, params.page_size, offset);
@@ -112,7 +115,6 @@ void io_benchmark_thread(benchmark_params params, uint64_t thread_id) {
                 std::cerr << "Thread " << thread_id << " - Read error: expected " << params.page_size << ", got " << bytes << std::endl;
             }
         } else {
-            memset(buf, 'A', params.page_size);
             bytes = pwrite(fd, buf, params.page_size, offset);
             if (bytes != params.page_size) {
                 std::cerr << "Thread " << thread_id << " - Write error: expected " << params.page_size << ", got " << bytes << std::endl;
