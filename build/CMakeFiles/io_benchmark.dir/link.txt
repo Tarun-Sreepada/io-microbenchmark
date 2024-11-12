@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 CMakeFiles/io_benchmark.dir/io_benchmark.cpp.o -o io_benchmark  -luring -lpthread

@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 CMakeFiles/io_benchmark_sync.dir/io_benchmark_sync.cpp.o -o io_benchmark_sync  -lpthread
