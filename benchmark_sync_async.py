@@ -10,7 +10,7 @@ import seaborn as sns
 operations = ['read', 'write']
 methods = ['seq', 'rand']
 # queue_depths = [1,2,128,512,1024,4096,8192,16384]  # Focusing on queue depth of 1 for comparison
-queue_depths = [1,2,4,8]
+queue_depths = [1,2,4,8,16,32]
 page_sizes = [4096]
 location = '/dev/nvme0n1'  # Update with your device
 io = 10000
@@ -156,6 +156,8 @@ for op_type in operations:
                 ax.set_xlabel('Queue Depth')
                 ax.set_ylabel(metric_label)
                 ax.grid(True)
+
+                ax.set_xscale('log', base=2)
                 ax.legend()
 
                 # Calculate and plot the ratio between sync and async

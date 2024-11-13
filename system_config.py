@@ -34,8 +34,8 @@ def get_memory_info():
 
 
 def get_nvme_storage_info():
-    # Run lsblk to get information on all block devices in JSON format
-    result = subprocess.run(['lsblk', '-J', '-o', 'NAME,SIZE,MOUNTPOINT,FSTYPE'], capture_output=True, text=True)
+    # Run lsblk to get information on all block devices in JSON format, including the MODEL attribute
+    result = subprocess.run(['lsblk', '-J', '-o', 'NAME,SIZE,MOUNTPOINT,FSTYPE,MODEL'], capture_output=True, text=True)
     devices = json.loads(result.stdout)["blockdevices"]
 
     storage_info = []
@@ -43,6 +43,7 @@ def get_nvme_storage_info():
         if "nvme" in device["name"]:  # Check for NVMe devices
             device_info = {
                 "Device": f"/dev/{device['name']}",
+                "Model": device["model"] if "model" in device else "Unknown",
                 "Size": device["size"],
                 "Mountpoint": device["mountpoint"] if device["mountpoint"] else "Not mounted",
                 "Filesystem": device["fstype"] if device["fstype"] else "N/A",
@@ -54,6 +55,7 @@ def get_nvme_storage_info():
                 for partition in device["children"]:
                     partition_info = {
                         "Device": f"/dev/{partition['name']}",
+                        "Model": device_info["Model"],  # Partitions have the same model as the parent device
                         "Size": partition["size"],
                         "Mountpoint": partition["mountpoint"] if partition["mountpoint"] else "Not mounted",
                         "Filesystem": partition["fstype"] if partition["fstype"] else "N/A",
