@@ -3,26 +3,35 @@ import psutil
 import subprocess
 import json
 
-
 def get_cpu_info():
     cpu_info = {
+        "CPU Sockets": 1,
         "CPU Cores": psutil.cpu_count(logical=False),
         "CPU Threads": psutil.cpu_count(logical=True),
-        "CPU Name": platform.processor()
+        "CPU Names": []
     }
+    
+    # Default CPU name using platform info
+    cpu_name = platform.processor()
     
     if platform.system() == "Linux":
         try:
+            socket_count = 0
+            cpu_names = set()
             with open("/proc/cpuinfo") as f:
                 for line in f:
+                    if "physical id" in line:
+                        socket_id = int(line.strip().split(":")[1].strip())
+                        socket_count = max(socket_count, socket_id + 1)
                     if "model name" in line:
-                        cpu_info["CPU Name"] = line.strip().split(":")[1].strip()
-                        break
+                        cpu_name = line.strip().split(":")[1].strip()
+                        cpu_names.add(cpu_name)
+            cpu_info["CPU Sockets"] = socket_count
+            cpu_info["CPU Names"] = list(cpu_names)
         except FileNotFoundError:
-            pass
-    
-    return cpu_info
+            cpu_info["CPU Names"] = [cpu_name]  # Fallback for non-Linux systems
 
+    return cpu_info
 def get_memory_info():
     virtual_mem = psutil.virtual_memory()
     mem_info = {
@@ -109,4 +118,30 @@ def print_system_info():
             print(f"  {info}")
         print()
 
-print_system_info()
+def print_system_info_summary():
+    sys_info = get_system_info()
+    
+    # Extract CPU information
+    cpu_name = sys_info["CPU Info"]["CPU Names"][0] if sys_info["CPU Info"]["CPU Names"] else "Unknown CPU"
+    cpu_cores = sys_info["CPU Info"]["CPU Cores"]
+    print(f"CPU: {cpu_name}, Cores: {cpu_cores}")
+    
+    # Extract DRAM information
+    dram_type = sys_info["Memory Info"]["DRAM Type"]
+    dram_capacity = sys_info["Memory Info"]["Total DRAM Capacity"]
+    print(f"DRAM: {dram_type}, Capacity: {dram_capacity}")
+    
+    # Extract the first NVMe storage device information, if available
+    nvme_devices = sys_info["NVMe Storage Info"]
+    if nvme_devices:
+        first_nvme = nvme_devices[0]
+        nvme_model = first_nvme["Model"]
+        nvme_size = first_nvme["Size"]
+        nvme_mountpoint = first_nvme["Mountpoint"]
+        print(f"NVMe: Model: {nvme_model}, Size: {nvme_size}, Mountpoint: {nvme_mountpoint}")
+    else:
+        print("NVMe: No NVMe storage devices found")
+
+print_system_info_summary()
+
+# print_system_info()
