@@ -10,11 +10,11 @@ import seaborn as sns
 operations = ['read', 'write']
 methods = ['seq', 'rand']
 # queue_depths = [1,2,128,512,1024,4096,8192,16384]  # Focusing on queue depth of 1 for comparison
-queue_depths = [1,2,4,8,16,32]
+queue_depths = [1,2,8,16]
 page_sizes = [4096]
 location = '/dev/nvme0n1'  # Update with your device
 io = 10000
-threads = 1  # Use a single thread for this comparison
+threads = 6  # Use a single thread for this comparison
 executables = {
     'async': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark'),
     'sync': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark_sync')
@@ -121,7 +121,7 @@ df = pd.DataFrame(results)
 
 
 # Save the results to a CSV file
-df.to_csv(f'benchmark_results_sync_vs_async_{queue_depths[0]}.csv', index=False)
+df.to_csv(f'benchmark_results_sync_vs_async.csv', index=False)
 
 
 # Set up the plotting style

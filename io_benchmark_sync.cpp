@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <stdexcept>
 #include <sys/ioctl.h>
+#include <sys/uio.h> // Include for iovec
 
 #define KIBI 1024LL
 #define KILO 1000LL
@@ -45,6 +46,7 @@ struct benchmark_params {
     bool skip_confirmation = false;
     ssize_t device_size = 0;
     uint64_t threads = 1;
+    uint64_t queue_depth = 1;
 
     int fd = -1;
     char *buf = nullptr;
@@ -52,6 +54,17 @@ struct benchmark_params {
     uint64_t total_num_pages = 0;
     uint64_t data_size = 0;
 };
+
+
+struct thread_stats {
+    uint64_t io_completed;
+    double total_latency;     // Sum of latencies in microseconds
+    double min_latency;
+    double max_latency;
+    double total_time;        // Total time in seconds
+};
+
+
 
 void print_help(const char *program_name) {
     std::cout << "Usage: " << program_name << " [OPTIONS]\n";
@@ -65,20 +78,28 @@ void print_help(const char *program_name) {
               << "  -y                          Skip confirmation\n"
               << "  --help                      Display this help message\n";
 }
-void io_benchmark_thread(benchmark_params params, uint64_t thread_id) {
+
+void io_benchmark_thread(benchmark_params &params, uint64_t thread_id, thread_stats &stats) {
     // Open the device/file per thread
-    int fd = open(params.location.c_str(), (params.read_or_write == "read") ? O_RDONLY | O_DIRECT : O_RDWR | O_DIRECT);
+    int fd = open(params.location.c_str(), 
+                  (params.read_or_write == "read") ? O_RDONLY | O_DIRECT : O_RDWR | O_DIRECT);
     if (fd == -1) {
         std::cerr << "Thread " << thread_id << " - Error opening device: " << strerror(errno) << std::endl;
         return;
     }
 
-    // Allocate buffer per thread
-    void* buf;
-    if (posix_memalign(&buf, params.page_size, params.page_size) != 0) {
-        std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
-        close(fd);
-        return;
+    // Allocate buffers
+    std::vector<void*> buffers(params.queue_depth);
+    for (uint64_t i = 0; i < params.queue_depth; ++i) {
+        if (posix_memalign(&buffers[i], params.page_size, params.page_size) != 0) {
+            std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
+            close(fd);
+            return;
+        }
+        // Fill buffer with data if writing
+        if (params.read_or_write == "write") {
+            memset(buffers[i], 'A', params.page_size);
+        }
     }
 
     // Generate offsets
@@ -95,65 +116,69 @@ void io_benchmark_thread(benchmark_params params, uint64_t thread_id) {
         }
     }
 
+    stats.io_completed = 0;
+    stats.total_latency = 0.0;
+    stats.min_latency = std::numeric_limits<double>::max();
+    stats.max_latency = 0.0;
+
     auto start_time = std::chrono::high_resolution_clock::now();
-    uint64_t io_completed = 0;
-    uint64_t min_latency = std::numeric_limits<uint64_t>::max();
-    uint64_t max_latency = 0;
-    double total_latency = 0.0;  // Total latency in microseconds
-    ssize_t bytes;
-    memset(buf, 'A', params.page_size);
 
-    for (uint64_t i = 0; i < params.io; ++i) {
-        uint64_t offset = offsets[i];
-        auto start = std::chrono::high_resolution_clock::now();
+    uint64_t submitted = 0;
+    uint64_t completed = 0;
 
-        if (params.read_or_write == "read") {
-            bytes = pread(fd, buf, params.page_size, offset);
-            if (bytes != params.page_size) {
-                std::cerr << "Thread " << thread_id << " - Read error: expected " << params.page_size << ", got " << bytes << std::endl;
+    while (completed < params.io) {
+        // Submit up to queue depth of requests
+        uint64_t batch_size = std::min(params.queue_depth, params.io - submitted);
+        std::vector<std::chrono::high_resolution_clock::time_point> submit_times(batch_size);
+
+        for (uint64_t i = 0; i < batch_size; ++i) {
+            uint64_t offset = offsets[submitted];
+            submit_times[i] = std::chrono::high_resolution_clock::now();
+
+            ssize_t bytes;
+            struct iovec iov;
+            iov.iov_base = buffers[i % params.queue_depth];
+            iov.iov_len = params.page_size;
+
+            if (params.read_or_write == "read") {
+                bytes = preadv(fd, &iov, 1, offset);
+            } else {
+                bytes = pwritev(fd, &iov, 1, offset);
             }
-        } else {
-            bytes = pwrite(fd, buf, params.page_size, offset);
+
             if (bytes != params.page_size) {
-                std::cerr << "Thread " << thread_id << " - Write error: expected " << params.page_size << ", got " << bytes << std::endl;
+                std::cerr << "Thread " << thread_id << " - I/O error: expected " 
+                          << params.page_size << ", got " << bytes << std::endl;
             }
+
+            ++submitted;
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        // Process the completed requests and update statistics
+        for (uint64_t i = 0; i < batch_size; ++i) {
+            auto completion_time = std::chrono::high_resolution_clock::now();
+            double latency = std::chrono::duration<double, std::micro>(completion_time - submit_times[i]).count();
 
-        io_completed++;
-        uint64_t latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        total_latency += latency;
+            stats.io_completed++;
+            stats.total_latency += latency;
+            stats.min_latency = std::min(stats.min_latency, latency);
+            stats.max_latency = std::max(stats.max_latency, latency);
 
-        if (latency < min_latency) {
-            min_latency = latency;
-        }
-        if (latency > max_latency) {
-            max_latency = latency;
+            ++completed;
         }
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
-    double total_time = std::chrono::duration<double>(end_time - start_time).count();
+    stats.total_time = std::chrono::duration<double>(end_time - start_time).count();
 
-    double throughput = io_completed / total_time;
-    double total_data_size = io_completed * params.page_size;
-    double total_data_size_MB = total_data_size / (1024.0 * 1024.0);
-    double avg_latency = total_latency / io_completed;  // Average latency in microseconds
+    // Free buffers
+    for (auto buf : buffers) {
+        free(buf);
+    }
 
-    std::cout << "Thread " << thread_id << " Results:"
-              << "\nTotal I/O Completed: " << io_completed
-              << "\nTotal Data Size: " << total_data_size_MB << " MB"
-              << "\nTotal Time: " << total_time << " seconds"
-              << "\nThroughput: " << throughput << " IOPS"
-              << "\nThroughput: " << total_data_size_MB / total_time << " MB/s"
-              << "\nAverage Latency: " << avg_latency << " microseconds"
-              << "\nMin Latency: " << min_latency << " microseconds"
-              << "\nMax Latency: " << max_latency << " microseconds" << std::endl;
-
-    free(buf);
     close(fd);
 }
+
 
 int main(int argc, char *argv[]) {
     benchmark_params params;
@@ -183,8 +208,8 @@ int main(int argc, char *argv[]) {
             case 't': params.read_or_write = optarg; break;
             case 'i': params.io = std::stoull(optarg); break;
             case 'n': params.threads = std::stoull(optarg); break;
+            case 'q': params.queue_depth = std::stoull(optarg); break;
             case 'y': params.skip_confirmation = true; break;
-            case 'q': temp = std::stoull(optarg); break;
             case 'h': print_help(argv[0]); return 0;
             default: std::cerr << "Invalid option. Use --help for usage information.\n"; return 1;
         }
@@ -215,13 +240,53 @@ int main(int argc, char *argv[]) {
 
     // Start threads
     std::vector<std::thread> threads;
+    std::vector<thread_stats> thread_stats_list(params.threads);
+
     for (uint64_t i = 0; i < params.threads; ++i) {
-        threads.emplace_back(io_benchmark_thread, std::ref(params), i);
+        threads.emplace_back(io_benchmark_thread, std::ref(params), i, std::ref(thread_stats_list[i]));
     }
 
     for (auto &t : threads) {
         t.join();
     }
+
+    // Calculate total statistics
+    uint64_t total_io_completed = 0;
+    double total_latency = 0.0;
+    double min_latency = std::numeric_limits<double>::max();
+    double max_latency = 0.0;
+    double total_time = 0.0;
+
+    for (const auto &stats : thread_stats_list) {
+        total_io_completed += stats.io_completed;
+        total_latency += stats.total_latency;
+        if (stats.min_latency < min_latency) {
+            min_latency = stats.min_latency;
+        }
+        if (stats.max_latency > max_latency) {
+            max_latency = stats.max_latency;
+        }
+        if (stats.total_time > total_time) {
+            total_time = stats.total_time;
+        }
+    }
+
+    double avg_latency = total_latency / total_io_completed;
+    double throughput = total_io_completed / total_time;
+
+    double total_data_size = total_io_completed * params.page_size;
+    double total_data_size_MB = total_data_size / (KILO * KILO);
+
+    std::cout << "\nAggregate Results:"
+              << "\nTotal I/O Completed: " << total_io_completed
+              << "\nTotal Data Size: " << total_data_size_MB << " MB"
+              << "\nTotal Time: " << total_time << " seconds"
+              << "\nThroughput: " << throughput << " IOPS"
+              << "\nThroughput: " << total_data_size_MB / total_time << " MB/s"
+              << "\nAverage Latency: " << avg_latency << " microseconds"
+              << "\nMin Latency: " << min_latency << " microseconds"
+              << "\nMax Latency: " << max_latency << " microseconds" << std::endl;
+
 
     free(params.buf);
     close(params.fd);
