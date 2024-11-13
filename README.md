@@ -34,3 +34,14 @@ To see the available options for running the benchmark, use the `--help` flag:
 ```
 
 This will display the usage information and available options for the benchmark tool.
+
+## Python Benchmark Script
+
+The repository also contains a Python script that can be used to run the benchmark multiple times and generate a summary of the results. To use the script, follow these steps:
+
+1. Make sure you have Python installed on your system.
+2. Modify the `benchmark.py` script to specify the parameters you want to use for the benchmark.
+3. Run the script as sudo to access /dev/{device}:
+    ```sh
+    sudo python benchmark.py
+    ```
