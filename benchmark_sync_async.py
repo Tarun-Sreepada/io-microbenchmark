@@ -9,14 +9,15 @@ import seaborn as sns
 # Define the parameter combinations
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1]  # Focusing on queue depth of 1 for comparison
-page_sizes = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
+# queue_depths = [1,2,128,512,1024,4096,8192,16384]  # Focusing on queue depth of 1 for comparison
+queue_depths = [1,2,4,8]
+page_sizes = [4096]
 location = '/dev/nvme0n1'  # Update with your device
-io = 20000
+io = 10000
 threads = 1  # Use a single thread for this comparison
 executables = {
-    'async': '/export/home1/ltarun/io-microbenchmark/build/io_benchmark',
-    'sync': '/export/home1/ltarun/io-microbenchmark/build/io_benchmark_sync'
+    'async': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark'),
+    'sync': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark_sync')
 }
 
 # Check if the script is run as root
@@ -118,73 +119,58 @@ for op_type, method, qd, page_size, (exec_type, exec_path) in itertools.product(
 # Organize the results for plotting
 df = pd.DataFrame(results)
 
+
 # Save the results to a CSV file
-df.to_csv('benchmark_results_sync_vs_async.csv', index=False)
+df.to_csv(f'benchmark_results_sync_vs_async_{queue_depths[0]}.csv', index=False)
+
 
 # Set up the plotting style
 sns.set(style="whitegrid")
 palette = sns.color_palette("muted")
 
-# Plot IOPS vs Page Size for Sync and Async
+# Iterate through each operation and method
 for op_type in operations:
     for method in methods:
-        plt.figure()
-        subset_async = df[(df['execution'] == 'async') & (df['operation'] == op_type) & (df['method'] == method)]
-        subset_sync = df[(df['execution'] == 'sync') & (df['operation'] == op_type) & (df['method'] == method)]
         
-        if not subset_async.empty:
-            plt.plot(subset_async['page_size'], subset_async['iops'], marker='o', label='Async')
-        if not subset_sync.empty:
-            plt.plot(subset_sync['page_size'], subset_sync['iops'], marker='x', label='Sync')
-        
-        plt.title(f'IOPS vs Page Size ({op_type.capitalize()}, {method}, QD={queue_depths[0]})')
-        plt.xlabel('Page Size (Bytes)')
-        plt.ylabel('IOPS')
-        plt.xscale('log', base=2)
-        plt.grid(True)
-        plt.legend()
-        plt.savefig(f'iops_sync_vs_async_{op_type}_{method}.png')
-        plt.close()
+        # Loop through page sizes
+        for page_size in page_sizes:
+            fig, axs = plt.subplots(3, 1, figsize=(10, 15))  # Create a figure with 3 subplots for IOPS, Bandwidth, and Latency
+            fig.suptitle(f'Metrics vs Queue Depth ({op_type.capitalize()}, {method}, Page Size={page_size})')
 
-# Similarly for Bandwidth and Average Latency
-for op_type in operations:
-    for method in methods:
-        plt.figure()
-        subset_async = df[(df['execution'] == 'async') & (df['operation'] == op_type) & (df['method'] == method)]
-        subset_sync = df[(df['execution'] == 'sync') & (df['operation'] == op_type) & (df['method'] == method)]
-        
-        if not subset_async.empty:
-            plt.plot(subset_async['page_size'], subset_async['bandwidth'], marker='o', label='Async')
-        if not subset_sync.empty:
-            plt.plot(subset_sync['page_size'], subset_sync['bandwidth'], marker='x', label='Sync')
-        
-        plt.title(f'Bandwidth vs Page Size ({op_type.capitalize()}, {method}, QD={queue_depths[0]})')
-        plt.xlabel('Page Size (Bytes)')
-        plt.ylabel('Bandwidth (MB/s)')
-        plt.xscale('log', base=2)
-        plt.grid(True)
-        plt.legend()
-        plt.savefig(f'bandwidth_sync_vs_async_{op_type}_{method}.png')
-        plt.close()
+            # Prepare subsets for async and sync data
+            subset_async = df[(df['execution'] == 'async') & (df['operation'] == op_type) & (df['method'] == method) & (df['page_size'] == page_size)]
+            subset_sync = df[(df['execution'] == 'sync') & (df['operation'] == op_type) & (df['method'] == method) & (df['page_size'] == page_size)]
+            
+            metrics = [('IOPS', 'iops'), ('Bandwidth (MB/s)', 'bandwidth'), ('Average Latency (μs)', 'avg_latency')]
 
-for op_type in operations:
-    for method in methods:
-        plt.figure()
-        subset_async = df[(df['execution'] == 'async') & (df['operation'] == op_type) & (df['method'] == method)]
-        subset_sync = df[(df['execution'] == 'sync') & (df['operation'] == op_type) & (df['method'] == method)]
-        
-        if not subset_async.empty:
-            plt.plot(subset_async['page_size'], subset_async['avg_latency'], marker='o', label='Async')
-        if not subset_sync.empty:
-            plt.plot(subset_sync['page_size'], subset_sync['avg_latency'], marker='x', label='Sync')
-        
-        plt.title(f'Average Latency vs Page Size ({op_type.capitalize()}, {method}, QD={queue_depths[0]})')
-        plt.xlabel('Page Size (Bytes)')
-        plt.ylabel('Average Latency (μs)')
-        plt.xscale('log', base=2)
-        plt.grid(True)
-        plt.legend()
-        plt.savefig(f'avg_latency_sync_vs_async_{op_type}_{method}.png')
-        plt.close()
+            for idx, (metric_label, metric_col) in enumerate(metrics):
+                ax = axs[idx]
+                
+                # Plot Sync and Async data for each metric
+                if not subset_async.empty:
+                    ax.plot(subset_async['queue_depth'], subset_async[metric_col], marker='o', label='Async')
+                if not subset_sync.empty:
+                    ax.plot(subset_sync['queue_depth'], subset_sync[metric_col], marker='x', label='Sync')
+                
+                ax.set_title(f'{metric_label} vs Queue Depth')
+                ax.set_xlabel('Queue Depth')
+                ax.set_ylabel(metric_label)
+                ax.grid(True)
+                ax.legend()
 
-print("Benchmarking and plotting completed.")
+                # Calculate and plot the ratio between sync and async
+                if not subset_sync.empty and not subset_async.empty:
+                    ratio = subset_async[metric_col].values / subset_sync[metric_col].values
+                    ax_ratio = ax.twinx()
+                    ax_ratio.plot(subset_sync['queue_depth'], ratio, color='green', linestyle='dashed', marker='s', label='Sync/Async')
+                    ax_ratio.set_ylabel(f'Sync/Async {metric_label} Ratio')
+                    ax_ratio.legend(loc='upper right')
+
+            # Save the combined plot to a single file
+            plt.tight_layout(rect=[0, 0.03, 1, 1])  # Adjust layout to make room for the main title
+            plt.savefig(f'combined_metrics_{op_type}_{method}_{page_size}.png')
+            plt.close(fig)
+
+print("Benchmarking and plotting with combined metrics completed.")
+
+

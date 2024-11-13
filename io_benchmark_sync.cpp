@@ -103,8 +103,6 @@ void io_benchmark_thread(benchmark_params params, uint64_t thread_id) {
     ssize_t bytes;
     memset(buf, 'A', params.page_size);
 
-
-
     for (uint64_t i = 0; i < params.io; ++i) {
         uint64_t offset = offsets[i];
         auto start = std::chrono::high_resolution_clock::now();

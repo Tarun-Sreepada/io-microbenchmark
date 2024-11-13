@@ -150,9 +150,7 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
 
     uint64_t submitted = 0;
     uint64_t completed = 0;
-
-
-
+    
     while (completed < params.io) {
         // Submit operations up to the queue depth
         while (submitted - completed < params.queue_depth && submitted < params.io) {
@@ -184,12 +182,20 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             exit(1);
         }
 
-        // Wait for completions
-        struct io_uring_cqe *cqe;
+        // Use io_uring_enter to handle completions and launch new requests
         while (completed < submitted) {
-            ret = io_uring_wait_cqe(&ring, &cqe);
+            ret = io_uring_enter(ring.ring_fd, 1, 1, IORING_ENTER_GETEVENTS, nullptr);
             if (ret < 0) {
-                std::cerr << "Thread " << thread_id << " - io_uring_wait_cqe failed: " << strerror(-ret) << std::endl;
+                std::cerr << "Thread " << thread_id << " - io_uring_enter failed: " << strerror(-ret) << std::endl;
+                exit(1);
+            }
+
+            struct io_uring_cqe *cqe;
+            ret = io_uring_peek_cqe(&ring, &cqe);
+            if (ret == -EAGAIN) {
+                break;  // No more completions at the moment
+            } else if (ret < 0) {
+                std::cerr << "Thread " << thread_id << " - io_uring_peek_cqe failed: " << strerror(-ret) << std::endl;
                 exit(1);
             }
 
@@ -223,6 +229,7 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             completed++;
         }
     }
+
 
     auto end_time = std::chrono::high_resolution_clock::now();
     stats.total_time = std::chrono::duration<double>(end_time - start_time).count();

@@ -10,12 +10,13 @@ import seaborn as sns
 # Define the parameter combinations
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256]
-page_sizes = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
+queue_depths = [1, 4, 16, 64]
+page_sizes = [4096, 65536]
 location = '/dev/nvme0n1'  # Update with your device
 io = 10000
-threads = 32
-path = '/export/home1/ltarun/io-microbenchmark/build/io_benchmark'
+threads = 6
+# path is the location of this script + build directory
+path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark')
 
 # Check if the script is run as root
 if os.geteuid() != 0:
