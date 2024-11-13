@@ -1,4 +1,0 @@
-/home/tarun/io-microbenchmark/build/CMakeFiles/io_benchmark.dir
-/home/tarun/io-microbenchmark/build/CMakeFiles/io_benchmark_sync.dir
-/home/tarun/io-microbenchmark/build/CMakeFiles/edit_cache.dir
-/home/tarun/io-microbenchmark/build/CMakeFiles/rebuild_cache.dir
