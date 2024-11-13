@@ -1,6 +1,8 @@
 import platform
 import psutil
 import subprocess
+import json
+
 
 def get_cpu_info():
     cpu_info = {
@@ -30,20 +32,34 @@ def get_memory_info():
     }
     return mem_info
 
+
 def get_nvme_storage_info():
-    partitions = psutil.disk_partitions()
+    # Run lsblk to get information on all block devices in JSON format
+    result = subprocess.run(['lsblk', '-J', '-o', 'NAME,SIZE,MOUNTPOINT,FSTYPE'], capture_output=True, text=True)
+    devices = json.loads(result.stdout)["blockdevices"]
+
     storage_info = []
-    for partition in partitions:
-        if '/dev/nvme' in partition.device:  # Filter only /dev/nvme devices
-            usage = psutil.disk_usage(partition.mountpoint)
-            storage_info.append({
-                "Device": partition.device,
-                "Mountpoint": partition.mountpoint,
-                "Filesystem": partition.fstype,
-                "Total Capacity": f"{usage.total / (1024**3):.2f} GB",
-                "Used Capacity": f"{usage.used / (1024**3):.2f} GB",
-                "Free Capacity": f"{usage.free / (1024**3):.2f} GB"
-            })
+    for device in devices:
+        if "nvme" in device["name"]:  # Check for NVMe devices
+            device_info = {
+                "Device": f"/dev/{device['name']}",
+                "Size": device["size"],
+                "Mountpoint": device["mountpoint"] if device["mountpoint"] else "Not mounted",
+                "Filesystem": device["fstype"] if device["fstype"] else "N/A",
+            }
+            storage_info.append(device_info)
+            
+            # If there are partitions under the NVMe device, add them as well
+            if "children" in device:
+                for partition in device["children"]:
+                    partition_info = {
+                        "Device": f"/dev/{partition['name']}",
+                        "Size": partition["size"],
+                        "Mountpoint": partition["mountpoint"] if partition["mountpoint"] else "Not mounted",
+                        "Filesystem": partition["fstype"] if partition["fstype"] else "N/A",
+                    }
+                    storage_info.append(partition_info)
+                    
     return storage_info
 
 def get_gpu_info():
