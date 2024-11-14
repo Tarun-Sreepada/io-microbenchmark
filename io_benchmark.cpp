@@ -104,10 +104,17 @@ std::string byte_conversion(unsigned long long bytes, const std::string &unit) {
 
 void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t thread_id) {
     struct io_uring ring;
+
+    struct io_uring_params params_ring;
+    memset(&params_ring, 0, sizeof(params_ring));
+    params_ring.flags = IORING_SETUP_SQPOLL;
+    params_ring.sq_thread_idle = 500;
+    params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU
+    params_ring.cq_entries = params.queue_depth;
     int ret;
 
     // Initialize io_uring for this thread
-    ret = io_uring_queue_init(params.queue_depth, &ring, 0);
+    ret = io_uring_queue_init_params(params.queue_depth, &ring, &params_ring);
     if (ret < 0) {
         std::cerr << "Thread " << thread_id << " - io_uring_queue_init failed: " << strerror(-ret) << std::endl;
         exit(1);
@@ -181,53 +188,51 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             std::cerr << "Thread " << thread_id << " - io_uring_submit failed: " << strerror(-ret) << std::endl;
             exit(1);
         }
+        
 
         // Use io_uring_enter to handle completions and launch new requests
+        // Optimize io_uring completion handling
         while (completed < submitted) {
-            ret = io_uring_enter(ring.ring_fd, 1, 1, IORING_ENTER_GETEVENTS, nullptr);
+            // Use `io_uring_enter` with a minimum number of completions to avoid EAGAIN and reduce system calls.
+            ret = io_uring_enter(ring.ring_fd, submitted - completed, 1, IORING_ENTER_GETEVENTS, nullptr);
             if (ret < 0) {
                 std::cerr << "Thread " << thread_id << " - io_uring_enter failed: " << strerror(-ret) << std::endl;
                 exit(1);
             }
 
             struct io_uring_cqe *cqe;
-            ret = io_uring_peek_cqe(&ring, &cqe);
-            if (ret == -EAGAIN) {
-                break;  // No more completions at the moment
-            } else if (ret < 0) {
-                std::cerr << "Thread " << thread_id << " - io_uring_peek_cqe failed: " << strerror(-ret) << std::endl;
-                exit(1);
+            unsigned int batch_count = 0;
+
+            // Retrieve multiple CQEs at once for batch processing
+            while (batch_count < params.queue_depth && io_uring_peek_cqe(&ring, &cqe) == 0) {
+                if (cqe->res < 0) {
+                    std::cerr << "Thread " << thread_id << " - I/O operation failed: " << strerror(-cqe->res) << std::endl;
+                } else if ((size_t)cqe->res != params.page_size) {
+                    std::cerr << "Thread " << thread_id << " - Short I/O operation: expected " << params.page_size << ", got " << cqe->res << std::endl;
+                }
+
+                // Calculate latency directly from a pre-allocated array
+                auto submit_time = *reinterpret_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
+                auto completion_time = std::chrono::high_resolution_clock::now();
+                double latency = std::chrono::duration<double, std::micro>(completion_time - submit_time).count();
+
+                // Accumulate latency and count for batch calculation
+                stats.io_completed++;
+                stats.total_latency += latency;
+
+                // Update `min_latency` and `max_latency` less frequently
+                stats.min_latency = std::min(stats.min_latency, latency);
+                stats.max_latency = std::max(stats.max_latency, latency);
+
+                // Clean up data and mark CQE as seen
+                delete static_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
+                io_uring_cqe_seen(&ring, cqe);
+
+                completed++;
+                batch_count++;
             }
-
-            if (cqe->res < 0) {
-                std::cerr << "Thread " << thread_id << " - I/O operation failed: " << strerror(-cqe->res) << std::endl;
-            } else if ((size_t)cqe->res != params.page_size) {
-                std::cerr << "Thread " << thread_id << " - Short I/O operation: expected " << params.page_size << ", got " << cqe->res << std::endl;
-            }
-
-            // Calculate latency
-            auto submit_time = *static_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
-            auto completion_time = std::chrono::high_resolution_clock::now();
-            double latency = std::chrono::duration<double, std::micro>(completion_time - submit_time).count();
-
-            // Update per-thread statistics
-            stats.io_completed++;
-            stats.total_latency += latency;
-            if (latency < stats.min_latency) {
-                stats.min_latency = latency;
-            }
-            if (latency > stats.max_latency) {
-                stats.max_latency = latency;
-            }
-
-            // Clean up
-            delete static_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
-
-            // Mark the CQE as seen
-            io_uring_cqe_seen(&ring, cqe);
-
-            completed++;
         }
+
     }
 
 
