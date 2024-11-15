@@ -9,10 +9,10 @@ import seaborn as sns
 # Define parameters
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 16384, 32768]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
-io_operations = 100000
+io_operations = 50000
 threads = 1
 
 executables = {
