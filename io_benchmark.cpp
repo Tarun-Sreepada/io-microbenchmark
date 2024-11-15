@@ -108,15 +108,13 @@ std::string byte_conversion(unsigned long long bytes, const std::string &unit) {
     return std::to_string(static_cast<int>(round(bytes))) + " " + units[i];
 }
 
-
-
 void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t thread_id) {
     struct io_uring ring;
 
     struct io_uring_params params_ring;
     memset(&params_ring, 0, sizeof(params_ring));
     params_ring.flags = IORING_SETUP_SQPOLL | IORING_SETUP_IOPOLL;
-    params_ring.sq_thread_idle = 1000;
+    params_ring.sq_thread_idle = 1;
     params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU
     params_ring.cq_entries = params.queue_depth * 2;
     int ret;
@@ -138,8 +136,8 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     }
 
     // Allocate buffers
-    std::vector<char*> buffers(params.queue_depth * 2);
-    for (uint64_t i = 0; i < params.queue_depth * 2; ++i) {
+    std::vector<char*> buffers(params.queue_depth);
+    for (uint64_t i = 0; i < params.queue_depth; ++i) {
         if (posix_memalign((void**)&buffers[i], params.page_size, params.page_size) != 0) {
             std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
             exit(1);
@@ -173,12 +171,12 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     // Initialize per-thread statistics
     stats.io_completed = 0;
     stats.total_latency = 0.0;
-    stats.min_latency = std::numeric_limits<double>::max();
+    stats.min_latency = 0.0;
     stats.max_latency = 0.0;
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::chrono::high_resolution_clock::time_point> submit_times(params.queue_depth);
+    // std::vector<std::chrono::high_resolution_clock::time_point> submit_times(params.queue_depth);
     uint64_t submitted = 0, completed = 0;
 
     while (completed < params.io) {
@@ -195,8 +193,8 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
                 io_uring_prep_write(sqe, params.fd, buffers[index], params.page_size, offset);
             }
 
-            submit_times[index] = std::chrono::high_resolution_clock::now();
-            io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(&submit_times[index]));
+            // submit_times[index] = std::chrono::high_resolution_clock::now();
+            // io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(&submit_times[index]));
 
             submitted++;
         }
@@ -227,21 +225,23 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
                     std::cerr << "Thread " << thread_id << " - Short I/O operation: expected " << params.page_size << ", got " << cqe->res << std::endl;
                 }
 
-                // Measure latency directly from pre-allocated vector
-                auto* submit_time_ptr = reinterpret_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
-                auto completion_time = std::chrono::high_resolution_clock::now();
-                double latency = std::chrono::duration<double, std::micro>(completion_time - *submit_time_ptr).count();
+                // // Measure latency directly from pre-allocated vector
+                // auto* submit_time_ptr = reinterpret_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
+                // auto completion_time = std::chrono::high_resolution_clock::now();
+                // double latency = std::chrono::duration<double, std::micro>(completion_time - *submit_time_ptr).count();
 
-                stats.io_completed++;
-                stats.total_latency += latency;
-                stats.min_latency = std::min(stats.min_latency, latency);
-                stats.max_latency = std::max(stats.max_latency, latency);
+                // stats.io_completed++;
+                // stats.total_latency += latency;
+                // stats.min_latency = std::min(stats.min_latency, latency);
+                // stats.max_latency = std::max(stats.max_latency, latency);
 
                 io_uring_cqe_seen(&ring, cqe);
                 completed++;
             }
         }
     }
+
+    stats.io_completed = completed;
 
     auto end_time = std::chrono::high_resolution_clock::now();
     stats.total_time = std::chrono::duration<double>(end_time - start_time).count();
@@ -368,7 +368,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    double avg_latency = total_latency / total_io_completed;
+    double temp_time = total_time * KILO * KILO; // Convert to microseconds
+
+    double avg_latency = temp_time / total_io_completed;
     double throughput = total_io_completed / total_time;
 
     double total_data_size = total_io_completed * params.page_size;

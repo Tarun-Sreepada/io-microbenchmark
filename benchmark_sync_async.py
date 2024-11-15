@@ -9,10 +9,10 @@ import seaborn as sns
 # Define parameters
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1, 2, 8, 16, 4096, 16384]
+queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
-io_operations = 50000
+io_operations = 100000
 threads = 1
 
 executables = {
@@ -20,10 +20,10 @@ executables = {
     'sync': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark_sync')
 }
 
-# Check for root privileges
-if os.geteuid() != 0:
-    print("This script needs to be run as root.")
-    exit(1)
+# # Check for root privileges
+# if os.geteuid() != 0:
+#     print("This script needs to be run as root.")
+#     exit(1)
 
 results = []
 
@@ -71,11 +71,12 @@ sns.set(style="whitegrid")
 for op in operations:
     for method in methods:
         for page_size in page_sizes:
-            fig, axs = plt.subplots(3, 1, figsize=(10, 15))
+            fig, axs = plt.subplots(3, 1, figsize=(10, 12))
             fig.suptitle(f'Metrics vs Queue Depth ({op.capitalize()}, {method}, Page Size={page_size})')
             metrics = [('IOPS', 'iops'), ('Bandwidth (MB/s)', 'bandwidth'), ('Average Latency (μs)', 'avg_latency')]
             
             for idx, (label, col) in enumerate(metrics):
+
                 ax = axs[idx]
                 subset_async = df[(df['execution'] == 'async') & (df['operation'] == op) & (df['method'] == method) & (df['page_size'] == page_size)]
                 subset_sync = df[(df['execution'] == 'sync') & (df['operation'] == op) & (df['method'] == method) & (df['page_size'] == page_size)]

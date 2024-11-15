@@ -26,7 +26,8 @@ valgrind --tool=callgrind --callgrind-out-file="$CALLGRIND_OUT" \
     --queue_depth="$QUEUE_DEPTH" \
     --io="$IO" \
     --method="$METHOD" \
-    --threads="$THREADS"
+    --threads="$THREADS" \
+    --type="write"
 
 echo "Valgrind profiling completed. Output file: $CALLGRIND_OUT"
 
