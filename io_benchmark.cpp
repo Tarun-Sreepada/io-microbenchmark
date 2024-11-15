@@ -26,6 +26,12 @@
 #include <mutex>
 #include <cerrno>
 #include <liburing.h>
+#include <x86intrin.h>
+
+__inline__ uint64_t rdtsc() {
+    return __rdtsc();
+}
+
 
 
 #define KIBI 1024LL
@@ -102,15 +108,17 @@ std::string byte_conversion(unsigned long long bytes, const std::string &unit) {
     return std::to_string(static_cast<int>(round(bytes))) + " " + units[i];
 }
 
+
+
 void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t thread_id) {
     struct io_uring ring;
 
     struct io_uring_params params_ring;
     memset(&params_ring, 0, sizeof(params_ring));
-    params_ring.flags = IORING_SETUP_SQPOLL;
-    params_ring.sq_thread_idle = 500;
+    params_ring.flags = IORING_SETUP_SQPOLL | IORING_SETUP_IOPOLL;
+    params_ring.sq_thread_idle = 1000;
     params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU
-    params_ring.cq_entries = params.queue_depth;
+    params_ring.cq_entries = params.queue_depth * 2;
     int ret;
 
     // Initialize io_uring for this thread
@@ -120,9 +128,18 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
         exit(1);
     }
 
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(thread_id % std::thread::hardware_concurrency(), &cpuset);
+    ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    if (ret != 0) {
+        std::cerr << "Thread " << thread_id << " - Failed to set CPU affinity: " << strerror(ret) << std::endl;
+        // Proceeding without affinity if setting fails
+    }
+
     // Allocate buffers
-    std::vector<char*> buffers(params.queue_depth);
-    for (uint64_t i = 0; i < params.queue_depth; ++i) {
+    std::vector<char*> buffers(params.queue_depth * 2);
+    for (uint64_t i = 0; i < params.queue_depth * 2; ++i) {
         if (posix_memalign((void**)&buffers[i], params.page_size, params.page_size) != 0) {
             std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
             exit(1);
@@ -130,6 +147,12 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
         // fill the buffer with data
         memset(buffers[i], 'A', params.page_size);
     }
+
+    // char *buffer = nullptr;
+    // if (posix_memalign((void**)&buffer, params.page_size, params.page_size) != 0) {
+    //     std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
+    //     exit(1);
+    // }
 
     // Generate offsets
     std::vector<uint64_t> offsets(params.io);
@@ -155,16 +178,13 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    uint64_t submitted = 0;
-    uint64_t completed = 0;
-    
+    std::vector<std::chrono::high_resolution_clock::time_point> submit_times(params.queue_depth);
+    uint64_t submitted = 0, completed = 0;
+
     while (completed < params.io) {
-        // Submit operations up to the queue depth
         while (submitted - completed < params.queue_depth && submitted < params.io) {
             struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-            if (!sqe) {
-                break;
-            }
+            if (!sqe) break;
 
             uint64_t index = submitted % params.queue_depth;
             uint64_t offset = offsets[submitted];
@@ -175,76 +195,63 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
                 io_uring_prep_write(sqe, params.fd, buffers[index], params.page_size, offset);
             }
 
-            // Record submission time
-            auto submit_time = std::chrono::high_resolution_clock::now();
-            io_uring_sqe_set_data(sqe, new auto(submit_time));
+            submit_times[index] = std::chrono::high_resolution_clock::now();
+            io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(&submit_times[index]));
 
             submitted++;
         }
 
-        // Submit SQEs
         ret = io_uring_submit(&ring);
         if (ret < 0) {
             std::cerr << "Thread " << thread_id << " - io_uring_submit failed: " << strerror(-ret) << std::endl;
             exit(1);
         }
-        
 
-        // Use io_uring_enter to handle completions and launch new requests
-        // Optimize io_uring completion handling
         while (completed < submitted) {
-            // Use `io_uring_enter` with a minimum number of completions to avoid EAGAIN and reduce system calls.
+            struct io_uring_cqe *cqe;
             ret = io_uring_enter(ring.ring_fd, submitted - completed, 1, IORING_ENTER_GETEVENTS, nullptr);
             if (ret < 0) {
                 std::cerr << "Thread " << thread_id << " - io_uring_enter failed: " << strerror(-ret) << std::endl;
                 exit(1);
             }
 
-            struct io_uring_cqe *cqe;
-            unsigned int batch_count = 0;
+            struct io_uring_cqe *cqes[params.queue_depth];
+            unsigned int batch_count = io_uring_peek_batch_cqe(&ring, cqes, params.queue_depth);
+            // std::cout << "Thread " << thread_id << " - Batch count: " << batch_count << std::endl;
 
-            // Retrieve multiple CQEs at once for batch processing
-            while (batch_count < params.queue_depth && io_uring_peek_cqe(&ring, &cqe) == 0) {
+            for (unsigned int j = 0; j < batch_count; ++j) {
+                struct io_uring_cqe *cqe = cqes[j];
                 if (cqe->res < 0) {
                     std::cerr << "Thread " << thread_id << " - I/O operation failed: " << strerror(-cqe->res) << std::endl;
                 } else if ((size_t)cqe->res != params.page_size) {
                     std::cerr << "Thread " << thread_id << " - Short I/O operation: expected " << params.page_size << ", got " << cqe->res << std::endl;
                 }
 
-                // Calculate latency directly from a pre-allocated array
-                auto submit_time = *reinterpret_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
+                // Measure latency directly from pre-allocated vector
+                auto* submit_time_ptr = reinterpret_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
                 auto completion_time = std::chrono::high_resolution_clock::now();
-                double latency = std::chrono::duration<double, std::micro>(completion_time - submit_time).count();
+                double latency = std::chrono::duration<double, std::micro>(completion_time - *submit_time_ptr).count();
 
-                // Accumulate latency and count for batch calculation
                 stats.io_completed++;
                 stats.total_latency += latency;
-
-                // Update `min_latency` and `max_latency` less frequently
                 stats.min_latency = std::min(stats.min_latency, latency);
                 stats.max_latency = std::max(stats.max_latency, latency);
 
-                // Clean up data and mark CQE as seen
-                delete static_cast<std::chrono::high_resolution_clock::time_point*>(io_uring_cqe_get_data(cqe));
                 io_uring_cqe_seen(&ring, cqe);
-
                 completed++;
-                batch_count++;
             }
         }
-
     }
-
 
     auto end_time = std::chrono::high_resolution_clock::now();
     stats.total_time = std::chrono::duration<double>(end_time - start_time).count();
 
-    // Free buffers
-    for (auto buf : buffers) {
-        free(buf);
+    // Free the buffer
+    for (uint64_t i = 0; i < params.queue_depth; ++i) {
+        free(buffers[i]);
     }
 
-    // Clean up io_uring
+
     io_uring_queue_exit(&ring);
 }
 
@@ -327,8 +334,6 @@ int main(int argc, char *argv[]) {
 
     params.total_num_pages = params.device_size / params.page_size;
     params.data_size = params.io * params.page_size;
-
-    // io_benchmark(params);
 
     std::vector<thread_stats> thread_stats_list(params.threads);
 

@@ -238,6 +238,8 @@ int main(int argc, char *argv[]) {
     params.total_num_pages = params.device_size / params.page_size;
     params.data_size = params.io * params.page_size;
 
+    params.queue_depth = 1;
+
     // Start threads
     std::vector<std::thread> threads;
     std::vector<thread_stats> thread_stats_list(params.threads);
