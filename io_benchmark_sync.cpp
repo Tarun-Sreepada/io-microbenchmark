@@ -227,6 +227,20 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // if write, add O_SYNC flag
+    if (params.read_or_write == "write") {
+        temp = fcntl(params.fd, F_GETFL);
+        if (temp == -1) {
+            std::cerr << "Error getting file flags: " << strerror(errno) << std::endl;
+            return 1;
+        }
+        temp |= O_SYNC;
+        if (fcntl(params.fd, F_SETFL, temp) == -1) {
+            std::cerr << "Error setting file flags: " << strerror(errno) << std::endl;
+            return 1;
+        }
+    }
+
     params.device_size = get_device_size(params.fd);
 
     if (posix_memalign((void **)&params.buf, params.page_size, params.page_size) != 0) {
@@ -238,7 +252,6 @@ int main(int argc, char *argv[]) {
     params.total_num_pages = params.device_size / params.page_size;
     params.data_size = params.io * params.page_size;
 
-    params.queue_depth = 1;
 
     // Start threads
     std::vector<std::thread> threads;

@@ -13,7 +13,7 @@ queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 16384, 32768]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
 io_operations = 50000
-threads = 1
+threads = 4
 
 executables = {
     'async': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark'),
@@ -37,6 +37,9 @@ for op, method, qd, page_size, (exec_type, exec_path) in itertools.product(opera
     ]
     
     try:
+        if exec_type == 'sync':
+            # queue_depth is not supported for sync. set to 1
+            cmd.remove(f'--queue_depth={qd}')
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, universal_newlines=True)
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {e.output}")
@@ -103,7 +106,7 @@ for op in operations:
                     ax_ratio.legend(loc='upper right', bbox_to_anchor=(1.0, 0.9))
 
             plt.tight_layout(rect=[0, 0.03, 1, 1])
-            plt.savefig(f'combined_metrics_{op}_{method}_{page_size}.png')
+            plt.savefig(f'combined_metrics_{op}_{method}_{page_size}_thread{threads}.png')
             plt.close(fig)
 
 print("Benchmarking and plotting with combined metrics completed.")

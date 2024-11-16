@@ -6,10 +6,10 @@ import time
 # Parameters
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1, 2, 8, 16, 4096]
+queue_depths = [1, 2, 8, 32, 128, 256, 512]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
-threads = 1
+threads = 4
 
 # Mapping for FIO command operations
 fio_operations = {
@@ -36,6 +36,7 @@ def run_fio(operation, method, queue_depth, page_size):
         '--time_based',
         '--output-format=json'
     ]
+    print(f"Running FIO: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     
     if result.returncode != 0:
@@ -64,19 +65,56 @@ for op in operations:
                 end = time.time()
                 estimated_avg = (end - start) / 3
                 if data is not None:
-                    # Extract metrics
-                    iops = data['jobs'][0][op]['iops']
-                    bandwidth = data['jobs'][0][op]['bw'] / 1024  # Bandwidth in KB/s, convert to MB/s
-                    avg_latency = data['jobs'][0][op].get('lat', {}).get('mean', None)  # Average latency in usec, or None if not available
-                    results[op][method][(qd, ps)] = {'iops': iops, 'bandwidth': bandwidth, 'latency': avg_latency}
+                    # Sum IOPS and bandwidth over all jobs
+                    total_iops = sum(job[op]['iops'] for job in data['jobs'])
+                    total_bandwidth = sum(job[op]['bw'] for job in data['jobs']) / 1024  # Convert to MB/s
+
+                    # Initialize variables for latency calculation
+                    total_iops_latency = 0
+                    valid_jobs = 0  # Counter for jobs with valid latency
+
+                    for job in data['jobs']:
+                        job_iops = job[op]['iops']
+
+                        # Access latency mean, checking which key exists
+                        if 'clat' in job[op] and 'mean' in job[op]['clat']:
+                            # 'clat' is in nanoseconds; convert to microseconds
+                            latency_mean = job[op]['clat']['mean'] / 1000.0
+                        elif 'lat_ns' in job[op] and 'mean' in job[op]['lat_ns']:
+                            # 'lat_ns' is in nanoseconds; convert to microseconds
+                            latency_mean = job[op]['lat_ns']['mean'] / 1000.0
+                        elif 'lat_us' in job[op] and 'mean' in job[op]['lat_us']:
+                            # 'lat_us' is already in microseconds
+                            latency_mean = job[op]['lat_us']['mean']
+                        elif 'lat' in job[op] and 'mean' in job[op]['lat']:
+                            # 'lat' might be in microseconds
+                            latency_mean = job[op]['lat']['mean']
+                        else:
+                            # If latency data is unavailable, skip this job
+                            latency_mean = None
+
+                        if latency_mean is not None:
+                            total_iops_latency += job_iops * latency_mean
+                            valid_jobs += 1
+
+                    # Compute the weighted average latency
+                    avg_latency = total_iops_latency / total_iops if total_iops > 0 else None
+
+                    results[op][method][(qd, ps)] = {
+                        'iops': total_iops,
+                        'bandwidth': total_bandwidth,
+                        'latency': avg_latency
+                    }
                 else:
                     results[op][method][(qd, ps)] = None  # In case of an error
 
-# Plot the results and save them as a single image with three vertical subplots
-fig, axes = plt.subplots(3, 1, figsize=(8, 18))
 
-metrics = ['iops', 'bandwidth', 'latency']
-y_labels = ['IOPS', 'Bandwidth (MB/s)', 'Average Latency (usec)']
+
+# Plot the results and save them as a single image with three vertical subplots
+fig, axes = plt.subplots(2, 1, figsize=(8, 16))
+
+metrics = ['iops', 'bandwidth']
+y_labels = ['IOPS', 'Bandwidth (MB/s)']
 
 
 for i, metric in enumerate(metrics):

@@ -40,6 +40,14 @@ fi
 # Check if KCachegrind is installed
 if ! command -v kcachegrind &> /dev/null; then
     echo "Error: KCachegrind is not installed. Please install it to visualize the profiling data."
+
+    # run callgrind_annotate to show the profiling data in the terminal
+    echo "Showing profiling data in profile.txt..."
+    callgrind_annotate "$CALLGRIND_OUT" > profile.txt
+
+    # delete the output file
+    rm "$CALLGRIND_OUT"
+
     exit 1
 fi
 
