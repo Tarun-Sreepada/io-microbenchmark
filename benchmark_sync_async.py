@@ -13,17 +13,17 @@ queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 16384, 32768]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
 io_operations = 50000
-threads = 4
+threads = 1
 
 executables = {
     'async': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark'),
     'sync': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'build/io_benchmark_sync')
 }
 
-# # Check for root privileges
-# if os.geteuid() != 0:
-#     print("This script needs to be run as root.")
-#     exit(1)
+# Check for root privileges
+if os.geteuid() != 0:
+    print("This script needs to be run as root.")
+    exit(1)
 
 results = []
 
@@ -68,6 +68,10 @@ for op, method, qd, page_size, (exec_type, exec_path) in itertools.product(opera
 df = pd.DataFrame(results)
 df.to_csv('benchmark_results_sync_vs_async.csv', index=False)
 
+# Load results from CSV
+df = pd.read_csv('benchmark_results_sync_vs_async.csv')
+
+
 # Set up plotting
 sns.set(style="whitegrid")
 
@@ -75,7 +79,7 @@ for op in operations:
     for method in methods:
         for page_size in page_sizes:
             fig, axs = plt.subplots(3, 1, figsize=(10, 12))
-            fig.suptitle(f'Metrics vs Queue Depth ({op.capitalize()}, {method}, Page Size={page_size})')
+            fig.suptitle(f'Metrics vs Queue Depth ({op.capitalize()}, {method}, Page Size={page_size})\nThread Count={threads}', fontsize=16)
             metrics = [('IOPS', 'iops'), ('Bandwidth (MB/s)', 'bandwidth'), ('Average Latency (μs)', 'avg_latency')]
             
             for idx, (label, col) in enumerate(metrics):

@@ -30,7 +30,7 @@ def run_fio(operation, method, queue_depth, page_size):
         f'--ioengine=io_uring',
         f'--iodepth={queue_depth}',
         '--size=1G',
-        '--runtime=3',
+        '--runtime=10',
         f'--numjobs={threads}',
         f'--filename={location}',
         '--time_based',
@@ -142,4 +142,4 @@ for i, metric in enumerate(metrics):
 
 # Save the figure
 plt.tight_layout()
-plt.savefig("fio_benchmark_results.png")
+plt.savefig(f"fio_benchmark_results_{threads}_threads.png")
