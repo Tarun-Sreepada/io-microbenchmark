@@ -6,7 +6,7 @@ sudo apt-get update
 sudo apt-get -y install cuda-toolkit-12-6
 sudo apt-get install -y nvidia-open
 
-sudo apt install git cmake gdb curl pkg-config liburing-dev curl fio
+sudo apt install git cmake gdb curl pkg-config liburing-dev curl fio valgrind
 
 git clone https://github.com/Tarun-Sreepada/io-microbenchmark.git
 

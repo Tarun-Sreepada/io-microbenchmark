@@ -9,7 +9,8 @@ import seaborn as sns
 # Define parameters
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 16384, 32768]
+# queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 16384, 32768]
+queue_depths = [1, 2, 4, 8]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
 io_operations = 50000
@@ -22,8 +23,10 @@ executables = {
 
 # Check for root privileges
 if os.geteuid() != 0:
-    print("This script needs to be run as root.")
-    exit(1)
+    # if not root, check if permissions to access the device are available
+    if not os.access(location, os.W_OK):
+        print(f"Cannot access device {location}. Please run as root or ensure permissions are set.")
+        exit(1)
 
 results = []
 
@@ -47,14 +50,15 @@ for op, method, qd, page_size, (exec_type, exec_path) in itertools.product(opera
 
     # Parse metrics from output
     metrics = {
-        'total_io': int(re.search(r'Total I/O Completed:\s+(\d+)', output).group(1)) if re.search(r'Total I/O Completed:\s+(\d+)', output) else None,
-        'total_time': float(re.search(r'Total Time:\s+([\d\.]+)\s+seconds', output).group(1)) if re.search(r'Total Time:\s+([\d\.]+)\s+seconds', output) else None,
-        'iops': float(re.search(r'Throughput:\s+([\d\.]+(?:e\+[\d]+)?)\s+IOPS', output).group(1)) if re.search(r'Throughput:\s+([\d\.]+(?:e\+[\d]+)?)\s+IOPS', output) else None,
-        'bandwidth': float(re.search(r'Throughput:\s+([\d\.]+)\s+MB/s', output).group(1)) if re.search(r'Throughput:\s+([\d\.]+)\s+MB/s', output) else None,
-        'min_latency': float(re.search(r'Min Latency:\s+([\d\.]+(?:e\+[\d]+)?)\s+microseconds', output).group(1)) if re.search(r'Min Latency:\s+([\d\.]+(?:e\+[\d]+)?)\s+microseconds', output) else None,
-        'max_latency': float(re.search(r'Max Latency:\s+([\d\.]+(?:e\+[\d]+)?)\s+microseconds', output).group(1)) if re.search(r'Max Latency:\s+([\d\.]+(?:e\+[\d]+)?)\s+microseconds', output) else None,
-        'avg_latency': float(re.search(r'Average Latency:\s+([\d\.]+(?:e\+[\d]+)?)\s+microseconds', output).group(1)) if re.search(r'Average Latency:\s+([\d\.]+(?:e\+[\d]+)?)\s+microseconds', output) else None
+        'total_io': int(re.search(r'Total I/O Completed:\s+([\d\.]+(?:e[+-]?\d+)?)', output).group(1)) if re.search(r'Total I/O Completed:\s+([\d\.]+(?:e[+-]?\d+)?)', output) else None,
+        'total_time': float(re.search(r'Total Time:\s+([\d\.]+(?:e[+-]?\d+)?)\s+seconds', output).group(1)) if re.search(r'Total Time:\s+([\d\.]+(?:e[+-]?\d+)?)\s+seconds', output) else None,
+        'iops': float(re.search(r'Throughput:\s+([\d\.]+(?:e[+-]?\d+)?)\s+IOPS', output).group(1)) if re.search(r'Throughput:\s+([\d\.]+(?:e[+-]?\d+)?)\s+IOPS', output) else None,
+        'bandwidth': float(re.search(r'Throughput:\s+([\d\.]+(?:e[+-]?\d+)?)\s+MB/s', output).group(1)) if re.search(r'Throughput:\s+([\d\.]+(?:e[+-]?\d+)?)\s+MB/s', output) else None,
+        'min_latency': float(re.search(r'Min Latency:\s+([\d\.]+(?:e[+-]?\d+)?)\s+microseconds', output).group(1)) if re.search(r'Min Latency:\s+([\d\.]+(?:e[+-]?\d+)?)\s+microseconds', output) else None,
+        'max_latency': float(re.search(r'Max Latency:\s+([\d\.]+(?:e[+-]?\d+)?)\s+microseconds', output).group(1)) if re.search(r'Max Latency:\s+([\d\.]+(?:e[+-]?\d+)?)\s+microseconds', output) else None,
+        'avg_latency': float(re.search(r'Average Latency:\s+([\d\.]+(?:e[+-]?\d+)?)\s+microseconds', output).group(1)) if re.search(r'Average Latency:\s+([\d\.]+(?:e[+-]?\d+)?)\s+microseconds', output) else None
     }
+
 
     if None in metrics.values():
         print("Failed to parse some metrics from output.")

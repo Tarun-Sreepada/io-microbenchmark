@@ -6,9 +6,10 @@ set -e
 # Variables
 IO_BENCHMARK="./build/io_benchmark"
 LOCATION="/dev/nvme0n1"
-QUEUE_DEPTH=4
+QUEUE_DEPTH=256
 IO=500000
-METHOD="rand"
+METHOD="seq"
+TYPE="write"
 THREADS=1
 CALLGRIND_OUT="callgrind.out.$(date +%s)"  # Unique filename based on timestamp
 
@@ -27,7 +28,7 @@ valgrind --tool=callgrind --callgrind-out-file="$CALLGRIND_OUT" \
     --io="$IO" \
     --method="$METHOD" \
     --threads="$THREADS" \
-    --type="write"
+    --type="$TYPE" -y
 
 echo "Valgrind profiling completed. Output file: $CALLGRIND_OUT"
 

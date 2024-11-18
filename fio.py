@@ -6,7 +6,7 @@ import time
 # Parameters
 operations = ['read', 'write']
 methods = ['seq', 'rand']
-queue_depths = [1, 2, 8, 32, 128, 256, 512]
+queue_depths = [1, 2, 8]
 page_sizes = [4096]
 location = '/dev/nvme0n1'
 threads = 4
@@ -30,11 +30,12 @@ def run_fio(operation, method, queue_depth, page_size):
         f'--ioengine=io_uring',
         f'--iodepth={queue_depth}',
         '--size=1G',
-        '--runtime=10',
+        '--runtime=2',
         f'--numjobs={threads}',
         f'--filename={location}',
         '--time_based',
-        '--output-format=json'
+        '--output-format=json',
+        '--direct=1'
     ]
     print(f"Running FIO: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -116,6 +117,11 @@ fig, axes = plt.subplots(2, 1, figsize=(8, 16))
 metrics = ['iops', 'bandwidth']
 y_labels = ['IOPS', 'Bandwidth (MB/s)']
 
+# Custom points to add
+randwrite_point = {'qd': 128, 'value': 180000}  # IOPS
+randread_point = {'qd': 256, 'value': 1000000}  # IOPS
+seqwrite_point = {'qd': 32, 'value': 4000}  # MB/s
+seqread_point = {'qd': 32, 'value': 6800}  # MB/s
 
 for i, metric in enumerate(metrics):
     for op in operations:
@@ -132,7 +138,16 @@ for i, metric in enumerate(metrics):
             
             if metric_values:  # Only plot if there are valid values
                 axes[i].plot(queue_depths_filtered, metric_values, marker='o', label=f'{fio_operations[(op, method)]}')
-                
+    
+    # Add custom points
+    if metric == 'iops':
+        # axes[i].scatter(randwrite_point['qd'], randwrite_point['value'], color='red', label='RandWrite Point', zorder=5) # set the size of the point
+        axes[i].scatter(randwrite_point['qd'], randwrite_point['value'], color='red', label='RandWrite Point', zorder=5, s=100)
+        axes[i].scatter(randread_point['qd'], randread_point['value'], color='blue', label='RandRead Point', zorder=5, s=100)
+    elif metric == 'bandwidth':
+        axes[i].scatter(seqwrite_point['qd'], seqwrite_point['value'], color='green', label='SeqWrite Point', zorder=5, s=100)
+        axes[i].scatter(seqread_point['qd'], seqread_point['value'], color='orange', label='SeqRead Point', zorder=5, s=100)
+    
     axes[i].set_xlabel('Queue Depth')
     axes[i].set_ylabel(y_labels[i])
     axes[i].set_title(f'FIO {y_labels[i]} Benchmark Results on {location}')

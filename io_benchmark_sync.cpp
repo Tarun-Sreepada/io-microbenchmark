@@ -29,6 +29,12 @@
 #define KIBI 1024LL
 #define KILO 1000LL
 
+uint64_t get_current_time_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1e9 + ts.tv_nsec;
+}
+
 unsigned long long get_device_size(int fd) {
     unsigned long long size;
     if (ioctl(fd, BLKGETSIZE64, &size) == -1) {
@@ -87,6 +93,16 @@ void io_benchmark_thread(benchmark_params &params, uint64_t thread_id, thread_st
         std::cerr << "Thread " << thread_id << " - Error opening device: " << strerror(errno) << std::endl;
         return;
     }
+    int ret;
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(thread_id % std::thread::hardware_concurrency(), &cpuset);
+    ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    if (ret != 0) {
+        std::cerr << "Thread " << thread_id << " - Failed to set CPU affinity: " << strerror(ret) << std::endl;
+        // Proceeding without affinity if setting fails
+    }
 
     // Allocate buffers
     std::vector<void*> buffers(params.queue_depth);
@@ -124,47 +140,43 @@ void io_benchmark_thread(benchmark_params &params, uint64_t thread_id, thread_st
     auto start_time = std::chrono::high_resolution_clock::now();
 
     uint64_t submitted = 0;
-    uint64_t completed = 0;
 
-    while (completed < params.io) {
+    while (stats.io_completed < params.io) {
         // Submit up to queue depth of requests
         uint64_t batch_size = std::min(params.queue_depth, params.io - submitted);
-        std::vector<std::chrono::high_resolution_clock::time_point> submit_times(batch_size);
+
+        std::vector<struct iovec> iovecs(batch_size);
+        std::vector<uint64_t> batch_offsets(batch_size);
+
 
         for (uint64_t i = 0; i < batch_size; ++i) {
-            uint64_t offset = offsets[submitted];
-            submit_times[i] = std::chrono::high_resolution_clock::now();
+            iovecs[i].iov_base = buffers[i % params.queue_depth];
+            iovecs[i].iov_len = params.page_size;
+            batch_offsets[i] = offsets[submitted++];
+        }
 
-            ssize_t bytes;
-            struct iovec iov;
-            iov.iov_base = buffers[i % params.queue_depth];
-            iov.iov_len = params.page_size;
+        ssize_t bytes;
 
-            if (params.read_or_write == "read") {
-                bytes = preadv(fd, &iov, 1, offset);
-            } else {
-                bytes = pwritev(fd, &iov, 1, offset);
-            }
+        uint64_t submit_time = get_current_time_ns();
+        if (params.read_or_write == "read") {
+            bytes = preadv(fd, iovecs.data(), batch_size, batch_offsets[0]);
+        } else {
+            bytes = pwritev(fd, iovecs.data(), batch_size, batch_offsets[0]);
+        }
 
-            if (bytes != params.page_size) {
-                std::cerr << "Thread " << thread_id << " - I/O error: expected " 
-                          << params.page_size << ", got " << bytes << std::endl;
-            }
-
-            ++submitted;
+        if (bytes < 0) {
+            std::cerr << "Thread " << thread_id << " - I/O error: " << strerror(errno) << std::endl;
+            break;
         }
 
         // Process the completed requests and update statistics
-        for (uint64_t i = 0; i < batch_size; ++i) {
-            auto completion_time = std::chrono::high_resolution_clock::now();
-            double latency = std::chrono::duration<double, std::micro>(completion_time - submit_times[i]).count();
+        uint64_t latency = get_current_time_ns() - submit_time;
 
+        for (uint64_t i = 0; i < batch_size; ++i) {
             stats.io_completed++;
             stats.total_latency += latency;
-            stats.min_latency = std::min(stats.min_latency, latency);
-            stats.max_latency = std::max(stats.max_latency, latency);
-
-            ++completed;
+            stats.min_latency = std::min(stats.min_latency, static_cast<double>(latency));
+            stats.max_latency = std::max(stats.max_latency, static_cast<double>(latency));
         }
     }
 
@@ -221,7 +233,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    params.fd = open(params.location.c_str(), O_RDWR | O_DIRECT);
+    params.fd = open(params.location.c_str(), O_RDWR | O_DIRECT | O_SYNC);
     if (params.fd == -1) {
         std::cerr << "Error opening device: " << strerror(errno) << std::endl;
         return 1;
@@ -292,8 +304,7 @@ int main(int argc, char *argv[]) {
     double total_data_size = total_io_completed * params.page_size;
     double total_data_size_MB = total_data_size / (KILO * KILO);
 
-    std::cout << "\nAggregate Results:"
-              << "\nTotal I/O Completed: " << total_io_completed
+    std::cout << "\nTotal I/O Completed: " << total_io_completed
               << "\nTotal Data Size: " << total_data_size_MB << " MB"
               << "\nTotal Time: " << total_time << " seconds"
               << "\nThroughput: " << throughput << " IOPS"
