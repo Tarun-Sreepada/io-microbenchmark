@@ -140,23 +140,21 @@ inline void handle_cqe(struct io_uring_cqe *cqe, uint64_t thread_id, benchmark_p
     }
 }
 
-void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
-{
+void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t thread_id) {
     struct io_uring ring;
 
     struct io_uring_params params_ring;
     memset(&params_ring, 0, sizeof(params_ring));
-    params_ring.flags = IORING_SETUP_IOPOLL;
+    params_ring.flags = IORING_SETUP_SQPOLL | IORING_SETUP_IOPOLL;
     params_ring.sq_thread_idle = 1000;
-    params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU
-    params_ring.cq_entries = params.queue_depth * 2;                             // Adequate CQ entries
-    params_ring.sq_entries = params.queue_depth;                                 // Adequate SQ entries
+    params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU 
+    params_ring.cq_entries = params.queue_depth * 2; // Adequate CQ entries
+    params_ring.sq_entries = params.queue_depth; // Adequate SQ entries
     int ret;
 
     // Initialize io_uring for this thread
     ret = io_uring_queue_init_params(params.queue_depth, &ring, &params_ring);
-    if (ret < 0)
-    {
+    if (ret < 0) {
         std::cerr << "Thread " << thread_id << " - io_uring_queue_init failed: " << strerror(-ret) << std::endl;
         exit(1);
     }
@@ -164,21 +162,18 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     // Bind the thread to a specific CPU
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(params_ring.sq_thread_cpu, &cpuset);
+    CPU_SET(thread_id % std::thread::hardware_concurrency(), &cpuset);
     ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-    if (ret != 0)
-    {
+    if (ret != 0) {
         std::cerr << "Thread " << thread_id << " - Failed to set CPU affinity: " << strerror(ret) << std::endl;
         // Proceeding without affinity if setting fails
     }
 
     // Allocate buffers and iovecs
-    std::vector<char *> buffers(params.queue_depth);
+    std::vector<char*> buffers(params.queue_depth);
     std::vector<struct iovec> iovecs(params.queue_depth);
-    for (uint64_t i = 0; i < params.queue_depth; ++i)
-    {
-        if (posix_memalign((void **)&buffers[i], params.page_size, params.page_size) != 0)
-        {
+    for (uint64_t i = 0; i < params.queue_depth; ++i) {
+        if (posix_memalign((void**)&buffers[i], params.page_size, params.page_size) != 0) {
             std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
             exit(1);
         }
@@ -192,24 +187,17 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
 
     // Generate offsets
     std::vector<uint64_t> offsets(params.io);
-    if (params.seq_or_rand == "seq")
-    {
-        for (uint64_t i = 0; i < params.io; ++i)
-        {
+    if (params.seq_or_rand == "seq") {
+        for (uint64_t i = 0; i < params.io; ++i) {
             offsets[i] = ((i * params.page_size) + thread_id * params.page_size) % params.device_size;
         }
-    }
-    else if (params.seq_or_rand == "rand")
-    {
+    } else if (params.seq_or_rand == "rand") {
         std::mt19937_64 rng(std::random_device{}() + thread_id);
         std::uniform_int_distribution<uint64_t> dist(0, params.total_num_pages - 1);
-        for (uint64_t i = 0; i < params.io; ++i)
-        {
+        for (uint64_t i = 0; i < params.io; ++i) {
             offsets[i] = dist(rng) * params.page_size;
         }
-    }
-    else
-    {
+    } else {
         throw std::runtime_error("Invalid method: " + params.seq_or_rand);
     }
 
@@ -226,50 +214,39 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     uint64_t submitted = 0, completed = 0;
     std::vector<uint64_t> latencies(params.io);
 
-    while (completed < params.io)
-    {
+    while (completed < params.io) {
         uint64_t available_sqe = io_uring_sq_space_left(&ring);
         available_sqe = std::min(available_sqe, params.io - submitted);
 
-        auto current_time = get_current_time_ns();
-        for (uint64_t i = 0; i < available_sqe; ++i)
-        {
-            struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-            if (!sqe)
-            {
+        for (uint64_t i = 0; i < available_sqe; ++i) {
+            struct io_uring_sqe* sqe = io_uring_get_sqe(&ring);
+            if (!sqe) {
                 std::cerr << "Failed to get SQE" << std::endl;
                 break;
             }
 
             uint64_t index = (submitted + i) % params.queue_depth;
             uint64_t offset = offsets[submitted + i];
-            latencies[submitted + i] = current_time;
+            latencies[submitted + i] = get_current_time_ns();
 
             // Prepare the I/O operation with a single iovec
             io_uring_prep_read_or_write(sqe, params.fd, &iovecs[index], 1, offset, params.read_or_write);
 
-            io_uring_sqe_set_data(sqe, reinterpret_cast<void *>(submitted + i));
+            io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(submitted + i));
         }
         submitted += available_sqe;
 
         ret = io_uring_submit(&ring);
-        if (ret < 0)
-        {
-            std::cerr << "Thread " << thread_id << " - io_uring_submit failed: " << strerror(-ret) << std::endl;
+
+        if (ret < 0) {
+            std::cerr << "Thread " << thread_id << " - io_uring_submit_and_wait failed: " << strerror(-ret) << std::endl;
             exit(1);
         }
 
-        // Wait for the number of completions equal to available_sqe
-        unsigned int num_cqes = 0;
-        while (num_cqes < available_sqe)
-        {
-            struct io_uring_cqe *cqe;
-            ret = io_uring_wait_cqe(&ring, &cqe);
-            if (ret < 0)
-            {
-                std::cerr << "Thread " << thread_id << " - io_uring_wait_cqe failed: " << strerror(-ret) << std::endl;
-                exit(1);
-            }
+        unsigned int num_cqes = io_uring_peek_batch_cqe(&ring, cqes, params.queue_depth);
+
+        for (unsigned int i = 0; i < num_cqes; ++i) {
+            struct io_uring_cqe *cqe = cqes[i];
 
             handle_cqe(cqe, thread_id, params);
 
@@ -277,18 +254,14 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             uint64_t completion_time = get_current_time_ns();
 
             latencies[location] = completion_time - latencies[location];
-
-            io_uring_cqe_seen(&ring, cqe);
-            num_cqes++;
         }
-
+        io_uring_cq_advance(&ring, num_cqes);
         completed += num_cqes;
     }
 
     stats.io_completed = completed;
     // Convert nanoseconds to microseconds
-    for (uint64_t i = 0; i < params.io; ++i)
-    {
+    for (uint64_t i = 0; i < params.io; ++i) {
         latencies[i] /= 1000;
     }
     stats.total_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0);
@@ -299,13 +272,15 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     stats.total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() / 1000.0; // Convert to seconds
 
     // Clean up resources
-    for (uint64_t i = 0; i < params.queue_depth; ++i)
-    {
+    for (uint64_t i = 0; i < params.queue_depth; ++i) {
         free(buffers[i]);
     }
 
     io_uring_queue_exit(&ring);
 }
+
+
+
 
 int main(int argc, char *argv[])
 {
