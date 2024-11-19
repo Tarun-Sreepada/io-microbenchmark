@@ -1,12 +1,12 @@
 --------------------------------------------------------------------------------
-Profile data file 'callgrind.out.1731937858' (creator: callgrind-3.22.0)
+Profile data file 'callgrind.out.1731990702' (creator: callgrind-3.22.0)
 --------------------------------------------------------------------------------
 I1 cache: 
 D1 cache: 
 LL cache: 
-Timerange: Basic block 0 - 515064969
+Timerange: Basic block 0 - 4440470
 Trigger: Program termination
-Profiled target:  ./build/io_benchmark --location=/dev/nvme0n1 --queue_depth=256 --io=500000 --method=seq --threads=1 --type=write -y (PID 819527, part 1)
+Profiled target:  ./build/io_benchmark --location=/dev/nvme0n1 --queue_depth=1 --io=100000 --method=seq --threads=1 --type=write -y --sync (PID 1270390, part 1)
 Events recorded:  Ir
 Events shown:     Ir
 Event sort order: Ir
@@ -16,835 +16,537 @@ User annotated:
 Auto-annotation:  on
 
 --------------------------------------------------------------------------------
-Ir                     
---------------------------------------------------------------------------------
-2,343,127,989 (100.0%)  PROGRAM TOTALS
-
---------------------------------------------------------------------------------
-Ir                    file:function
---------------------------------------------------------------------------------
-776,461,133 (33.14%)  ???:io_uring_peek_batch_cqe [/usr/lib/x86_64-linux-gnu/liburing.so.2.5]
-583,143,810 (24.89%)  ???:io_uring_submit [/usr/lib/x86_64-linux-gnu/liburing.so.2.5]
-576,234,565 (24.59%)  io_benchmark.cpp:io_benchmark_thread(benchmark_params&, thread_stats&, unsigned long) [/home/tarun/io-microbenchmark/build/io_benchmark]
-181,020,103 ( 7.73%)  /usr/include/liburing.h:io_benchmark_thread(benchmark_params&, thread_stats&, unsigned long)
- 46,650,463 ( 1.99%)  /usr/include/c++/13/bits/stl_algobase.h:io_benchmark_thread(benchmark_params&, thread_stats&, unsigned long)
- 46,649,160 ( 1.99%)  ???:0x000000000010b640 [???]
- 46,649,160 ( 1.99%)  ???:0x000000000010b840 [???]
- 46,149,162 ( 1.97%)  /usr/include/c++/13/ostream:io_benchmark_thread(benchmark_params&, thread_stats&, unsigned long)
- 11,000,022 ( 0.47%)  ./time/../sysdeps/unix/sysv/linux/clock_gettime.c:clock_gettime@@GLIBC_2.17 [/usr/lib/x86_64-linux-gnu/libc.so.6]
-  9,053,116 ( 0.39%)  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_avx2_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
-
---------------------------------------------------------------------------------
--- Auto-annotated source: io_benchmark.cpp
---------------------------------------------------------------------------------
-Ir                   
-
--- line 33 ----------------------------------------
-          .           #define KIBI 1024LL
-          .           #define KILO 1000LL
-          .           
-          .           #include <time.h>
-          .           
-          .           uint64_t get_current_time_ns()
-          .           {
-          .               struct timespec ts;
-  3,007,816 ( 0.13%)      clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
- 13,000,000 ( 0.55%)  => ???:0x000000000010b5f0 (1,000,000x)
- 12,503,908 ( 0.53%)      return static_cast<uint64_t>(ts.tv_sec) * 1e9 + ts.tv_nsec;
-          .           }
-          .           
-          .           unsigned long long get_device_size(int fd)
-          9 ( 0.00%)  {
-          .               unsigned long long size;
-          5 ( 0.00%)      if (ioctl(fd, BLKGETSIZE64, &size) == -1)
-         26 ( 0.00%)  => ???:0x000000000010b700 (1x)
-          .               {
-          .                   throw std::runtime_error("Failed to get device size using ioctl: " + std::string(strerror(errno)));
-          .               }
-          .           
-          1 ( 0.00%)      return size;
-          9 ( 0.00%)  }
-          .           
-         17 ( 0.00%)  struct benchmark_params
-          .           {
-          .               std::string location;               // Block device location (e.g., /dev/sda)
-          .               int page_size = 4096;               // Default page size
-          .               std::string seq_or_rand = "seq";    // Default method: sequential
-          .               std::string read_or_write = "read"; // Default type: read
-          .               uint64_t io = 10000;                // Default IO
-          .               bool skip_confirmation = false;     // Default: do not skip confirmation
-          .               ssize_t device_size = 0;            // Size of the device (default: 0)
--- line 64 ----------------------------------------
--- line 125 ----------------------------------------
-          .               else
-          .               {
-          .                   io_uring_prep_writev(sqe, fd, iovec_ptr, nr_vecs, offset);
-          .               }
-          .           }
-          .           
-          .           inline void handle_cqe(struct io_uring_cqe *cqe, uint64_t thread_id, benchmark_params &params)
-          .           {
-  1,500,000 ( 0.06%)      if (cqe->res < 0)
-          .               {
-          .                   std::cerr << "Thread " << thread_id << " - I/O operation failed: " << strerror(-cqe->res) << std::endl;
-          .               }
-  1,000,000 ( 0.04%)      else if ((size_t)cqe->res != params.page_size)
-          .               {
-          .                   std::cerr << "Thread " << thread_id << " - Short I/O operation: expected " << params.page_size << ", got " << cqe->res << std::endl;
-          .               }
-          .           }
-          .           
-         20 ( 0.00%)  void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t thread_id) {
-          .               struct io_uring ring;
-          .           
-          .               struct io_uring_params params_ring;
-          .               memset(&params_ring, 0, sizeof(params_ring));
-          .               // params_ring.flags = IORING_SETUP_SQPOLL | IORING_SETUP_IOPOLL; 
-          .               // If SQPOLL is used, the return value may report a higher number of submitted entries 
-          .               // than actually submitted. If the user requires accurate information about how many 
-          .               // submission queue entries have been successfully submitted, while using SQPOLL, the 
-          .               // user must fall back to repeatedly submitting a single submission queue entry. On failure it returns -errno.
-          1 ( 0.00%)      params_ring.sq_thread_idle = 1000;
-          6 ( 0.00%)      params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU 
-      1,283 ( 0.00%)  => ???:0x000000000010b6e0 (1x)
-          4 ( 0.00%)      params_ring.cq_entries = params.queue_depth * 2; // Adequate CQ entries
-          1 ( 0.00%)      params_ring.sq_entries = params.queue_depth; // Adequate SQ entries
-          .               int ret;
-          .           
-          .               // Initialize io_uring for this thread
-          5 ( 0.00%)      ret = io_uring_queue_init_params(params.queue_depth, &ring, &params_ring);
-      1,076 ( 0.00%)  => ???:0x000000000010b750 (1x)
-          3 ( 0.00%)      if (ret < 0) {
-          .                   std::cerr << "Thread " << thread_id << " - io_uring_queue_init failed: " << strerror(-ret) << std::endl;
-          .                   exit(1);
-          .               }
-          .           
-          .               // Bind the thread to a specific CPU
-          .               cpu_set_t cpuset;
-         21 ( 0.00%)      CPU_ZERO(&cpuset);
-         14 ( 0.00%)      CPU_SET(thread_id % std::thread::hardware_concurrency(), &cpuset);
-        431 ( 0.00%)  => ???:0x000000000010b6e0 (1x)
-          6 ( 0.00%)      ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-         12 ( 0.00%)  => ???:0x000000000010b800 (1x)
-          5 ( 0.00%)  => ???:0x000000000010b5d0 (1x)
-          2 ( 0.00%)      if (ret != 0) {
-          .                   std::cerr << "Thread " << thread_id << " - Failed to set CPU affinity: " << strerror(ret) << std::endl;
-          .                   // Proceeding without affinity if setting fails
-          .               }
-          .           
-          .               // Allocate buffers and iovecs
-          1 ( 0.00%)      std::vector<char*> buffers(params.queue_depth);
-          1 ( 0.00%)      std::vector<struct iovec> iovecs(params.queue_depth);
-      1,288 ( 0.00%)      for (uint64_t i = 0; i < params.queue_depth; ++i) {
-      1,536 ( 0.00%)          if (posix_memalign((void**)&buffers[i], params.page_size, params.page_size) != 0) {
-    168,551 ( 0.01%)  => ???:0x000000000010b520 (256x)
-          .                       std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
-          .                       exit(1);
-          .                   }
-          .                   // Fill the buffer with data
-        256 ( 0.00%)          memset(buffers[i], 'A', params.page_size);
-          .           
-          .                   // Initialize iovec
-        512 ( 0.00%)          iovecs[i].iov_base = buffers[i];
-        512 ( 0.00%)          iovecs[i].iov_len = params.page_size;
-          .               }
-          .           
-          .               // Generate offsets
-          1 ( 0.00%)      std::vector<uint64_t> offsets(params.io);
-          .               if (params.seq_or_rand == "seq") {
-  2,000,004 ( 0.09%)          for (uint64_t i = 0; i < params.io; ++i) {
-  2,000,006 ( 0.09%)              offsets[i] = ((i * params.page_size) + thread_id * params.page_size) % params.device_size;
-          .                   }
-          .               } else if (params.seq_or_rand == "rand") {
-          .                   std::mt19937_64 rng(std::random_device{}() + thread_id);
-          .                   std::uniform_int_distribution<uint64_t> dist(0, params.total_num_pages - 1);
-          .                   for (uint64_t i = 0; i < params.io; ++i) {
-          .                       offsets[i] = dist(rng) * params.page_size;
-          .                   }
-          .               } else {
-          .                   throw std::runtime_error("Invalid method: " + params.seq_or_rand);
-          .               }
-          .           
-          .               // Initialize per-thread statistics
-          2 ( 0.00%)      stats.io_completed = 0;
-          2 ( 0.00%)      stats.total_latency = 0.0;
-          .               stats.min_latency = 0.0;
-          1 ( 0.00%)      stats.max_latency = 0.0;
-          .           
-         16 ( 0.00%)      struct io_uring_cqe *cqes[params.queue_depth];
-          .           
-          2 ( 0.00%)      auto start_time = std::chrono::high_resolution_clock::now();
-        906 ( 0.00%)  => ???:0x000000000010b470 (1x)
-          .           
-          3 ( 0.00%)      uint64_t submitted = 0, completed = 0;
-          1 ( 0.00%)      std::vector<uint64_t> latencies(params.io);
-          .           
- 69,973,743 ( 2.99%)      while (completed < params.io) {
- 23,324,580 ( 1.00%)          uint64_t available_sqe = io_uring_sq_space_left(&ring);
- 46,649,160 ( 1.99%)          available_sqe = std::min(available_sqe, params.io - submitted);
-          .           
- 48,151,114 ( 2.05%)          for (uint64_t i = 0; i < available_sqe; ++i) {
-          .                       struct io_uring_sqe* sqe = io_uring_get_sqe(&ring);
-  1,000,000 ( 0.04%)              if (!sqe) {
-          .                           std::cerr << "Failed to get SQE" << std::endl;
-          .                           break;
-          .                       }
-          .           
-  2,000,000 ( 0.09%)              uint64_t index = (submitted + i) % params.queue_depth;
-  2,000,000 ( 0.09%)              uint64_t offset = offsets[submitted + i];
-  1,000,000 ( 0.04%)              latencies[submitted + i] = get_current_time_ns();
-          .           
-          .                       // Prepare the I/O operation with a single iovec
-          .                       // io_uring_prep_read_or_write(sqe, params.fd, &iovecs[index], 1, offset, params.read_or_write);
-          .                       if (params.read_or_write == "read") {
-          .                           // io_uring_prep_readv(sqe, params.fd, &iovecs[index], 1, offset);
-          .                           io_uring_prep_read(sqe, params.fd, buffers[index], params.page_size, offset);
-          .                       } else {
-          .                           // io_uring_prep_writev(sqe, params.fd, &iovecs[index], 1, offset);
-  1,000,000 ( 0.04%)                  io_uring_prep_write(sqe, params.fd, buffers[index], params.page_size, offset);
-          .                       }
-          .           
-          .                       io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(submitted + i));
-          .                   }
-          .                   submitted += available_sqe;
-          .           
- 69,973,740 ( 2.99%)          ret = io_uring_submit(&ring);
-629,792,970 (26.88%)  => ???:0x000000000010b640 (23,324,580x)
-          .           
- 46,649,160 ( 1.99%)          if (ret < 0) {
-          .                       std::cerr << "Thread " << thread_id << " - io_uring_submit_and_wait failed: " << strerror(-ret) << std::endl;
-          .                       exit(1);
-          .                   }
-          .           
-116,622,900 ( 4.98%)          unsigned int num_cqes = io_uring_peek_batch_cqe(&ring, cqes, params.queue_depth);
-823,110,293 (35.13%)  => ???:0x000000000010b840 (23,324,580x)
-          .           
- 49,899,153 ( 2.13%)          for (unsigned int i = 0; i < num_cqes; ++i) {
-    500,000 ( 0.02%)              struct io_uring_cqe *cqe = cqes[i];
-          .           
-          .                       handle_cqe(cqe, thread_id, params);
-          .           
-          .                       auto location = reinterpret_cast<uint64_t>(io_uring_cqe_get_data(cqe));
-          .                       uint64_t completion_time = get_current_time_ns();
-          .           
-  1,000,000 ( 0.04%)              latencies[location] = completion_time - latencies[location];
-          .                   }
-          .                   io_uring_cq_advance(&ring, num_cqes);
- 69,973,740 ( 2.99%)          completed += num_cqes;
-          .               }
-          .           
-          2 ( 0.00%)      stats.io_completed = completed;
-          .               // Convert nanoseconds to microseconds
-  1,500,004 ( 0.06%)      for (uint64_t i = 0; i < params.io; ++i) {
-  3,000,001 ( 0.13%)          latencies[i] /= 1000;
-          .               }
-          2 ( 0.00%)      stats.total_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0);
-          7 ( 0.00%)      stats.min_latency = *std::min_element(latencies.begin(), latencies.end());
-          6 ( 0.00%)      stats.max_latency = *std::max_element(latencies.begin(), latencies.end());
-          .           
-          1 ( 0.00%)      auto end_time = std::chrono::high_resolution_clock::now();
-         31 ( 0.00%)  => ???:0x000000000010b470 (1x)
-          4 ( 0.00%)      stats.total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() / 1000.0; // Convert to seconds
-          .           
-          .               // Clean up resources
-        772 ( 0.00%)      for (uint64_t i = 0; i < params.queue_depth; ++i) {
-        512 ( 0.00%)          free(buffers[i]);
-     69,286 ( 0.00%)  => ???:0x000000000010b690 (256x)
-          .               }
-          .           
-          2 ( 0.00%)      io_uring_queue_exit(&ring);
-         50 ( 0.00%)  => ???:0x000000000010b7a0 (1x)
-         11 ( 0.00%)  }
-          .           
-          .           
-          .           
-          .           
-          .           int main(int argc, char *argv[])
-         14 ( 0.00%)  {
-          .               benchmark_params params;
-          .           
-         44 ( 0.00%)      struct option long_options[] = {
-          .                   {"location", required_argument, nullptr, 'l'},
-          .                   {"page_size", required_argument, nullptr, 'p'},
-          .                   {"method", required_argument, nullptr, 'm'},
-          .                   {"type", required_argument, nullptr, 't'},
-          .                   {"io", required_argument, nullptr, 'i'},
-          .                   {"threads", required_argument, nullptr, 'n'},
-          .                   {"queue_depth", required_argument, nullptr, 'q'},
-          .                   {"help", no_argument, nullptr, 'h'},
-          .                   {"skip_confirmation", no_argument, nullptr, 'y'},
-          .                   {nullptr, 0, nullptr, 0}};
-          .           
-          .               int opt;
-         64 ( 0.00%)      while ((opt = getopt_long(argc, argv, "l:p:m:t:i:n:q:hy", long_options, nullptr)) != -1)
-      3,588 ( 0.00%)  => ???:0x000000000010b790 (8x)
-          .               {
-         43 ( 0.00%)          switch (opt)
-          .                   {
-          .                   case 'l':
-          .                       params.location = optarg;
-          .                       break;
-          .                   case 'p':
-          .                       params.page_size = std::stoi(optarg);
-          .                       break;
-          .                   case 'm':
-          .                       params.seq_or_rand = optarg;
-          .                       break;
-          .                   case 't':
-          .                       params.read_or_write = optarg;
-          .                       break;
-          .                   case 'i':
-          6 ( 0.00%)              params.io = std::stoull(optarg);
-         76 ( 0.00%)  => /usr/include/c++/13/bits/basic_string.h:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string<std::allocator<char> >(char const*, std::allocator<char> const&) [clone .constprop.0] (1x)
-          1 ( 0.00%)              break;
-          .                   case 'n':
-          6 ( 0.00%)              params.threads = std::stoull(optarg);
-         51 ( 0.00%)  => /usr/include/c++/13/bits/basic_string.h:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string<std::allocator<char> >(char const*, std::allocator<char> const&) [clone .constprop.0] (1x)
-          1 ( 0.00%)              break;
-          .                   case 'q':
-          6 ( 0.00%)              params.queue_depth = std::stoull(optarg);
-         79 ( 0.00%)  => /usr/include/c++/13/bits/basic_string.h:std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::basic_string<std::allocator<char> >(char const*, std::allocator<char> const&) [clone .constprop.0] (1x)
-          1 ( 0.00%)              break;
-          .                   case 'y':
-          1 ( 0.00%)              params.skip_confirmation = true;
-          1 ( 0.00%)              break;
-          .                   case 'h':
-          .                       print_help(argv[0]);
-          1 ( 0.00%)              return 0;
-          .                   default:
-          .                       std::cerr << "Invalid option. Use --help for usage information.\n";
-          .                       return 1;
-          .                   }
-          .               }
-          .           
-          2 ( 0.00%)      if (params.location.empty())
-          .               {
-          .                   std::cerr << "Error: --location is required.\n";
-          .                   print_help(argv[0]);
-          .                   return 1;
-          .               }
-          .           
-          .               std::cout << "Location: " << params.location
-          .                         << "\tPage Size: " << params.page_size
-          .                         << "\tMethod: " << params.seq_or_rand
-          .                         << "\tType: " << params.read_or_write
-          4 ( 0.00%)                << "\tIO: " << params.io
-      4,937 ( 0.00%)  => ???:0x000000000010b7f0 (1x)
-          .                         << "\tThreads: " << params.threads
-          .                         << "\tQueue Depth: " << params.queue_depth << std::endl;
-          .           
-          1 ( 0.00%)      params.fd = open(params.location.c_str(), O_RDWR | O_DIRECT | O_SYNC);
-          2 ( 0.00%)      if (params.fd == -1)
-          .               {
-          .                   std::cerr << "Error opening device: " << strerror(errno) << std::endl;
-          .                   return 1;
-          .               }
-          .           
-          3 ( 0.00%)      params.device_size = get_device_size(params.fd);
-         50 ( 0.00%)  => io_benchmark.cpp:get_device_size(int) (1x)
-          .           
-          2 ( 0.00%)      if (params.read_or_write == "write" && !params.skip_confirmation)
-          .               {
-          .                   std::cout << "\n\033[1;31m*** WARNING: Data Loss Risk ***\033[0m\n"
-          .                             << "This will erase all data in: \033[1;31m" << params.location << "\033[0m\n"
-          .                             << "Size: \033[1;31m" << byte_conversion(params.device_size, "binary")
-          .                             << " (" << byte_conversion(params.device_size, "metric") << ")\033[0m\n"
-          .                             << "Continue? (y/n): ";
-          .           
-          .                   char response;
--- line 382 ----------------------------------------
--- line 383 ----------------------------------------
-          .                   std::cin >> response;
-          .                   if (response != 'y')
-          .                   {
-          .                       std::cout << "Write benchmark aborted.\n";
-          .                       return 0;
-          .                   }
-          .               }
-          .           
-          8 ( 0.00%)      if (posix_memalign((void **)&params.buf, params.page_size, params.page_size) != 0)
-        448 ( 0.00%)  => ???:0x000000000010b520 (1x)
-          .               {
-          .                   close(params.fd);
-          .                   std::cerr << "Error allocating aligned memory\n";
-          .                   return 1;
-          .               }
-          .           
-          4 ( 0.00%)      params.total_num_pages = params.device_size / params.page_size;
-          2 ( 0.00%)      params.data_size = params.io * params.page_size;
-          .           
-          5 ( 0.00%)      std::vector<thread_stats> thread_stats_list(params.threads);
-        103 ( 0.00%)  => /usr/include/c++/13/bits/stl_vector.h:std::vector<thread_stats, std::allocator<thread_stats> >::~vector() (1x)
-          .           
-          2 ( 0.00%)      std::vector<std::thread> threads;
-        113 ( 0.00%)  => /usr/include/c++/13/bits/stl_vector.h:std::vector<std::thread, std::allocator<std::thread> >::~vector() (1x)
-         10 ( 0.00%)      for (uint64_t i = 0; i < params.threads; ++i)
-          .               {
-          1 ( 0.00%)          threads.emplace_back(io_benchmark_thread, std::ref(params), std::ref(thread_stats_list[i]), i);
-          .               }
-          .           
-          .               // Wait for all threads to complete
-          5 ( 0.00%)      for (auto &t : threads)
-          .               {
-          2 ( 0.00%)          t.join();
-      1,085 ( 0.00%)  => ???:0x000000000010b7d0 (1x)
-          .               }
-          .           
-          .               // Calculate total statistics
-          1 ( 0.00%)      uint64_t total_io_completed = 0;
-          1 ( 0.00%)      double total_latency = 0.0;
-          3 ( 0.00%)      double min_latency = std::numeric_limits<double>::max();
-          1 ( 0.00%)      double max_latency = 0.0;
-          1 ( 0.00%)      double total_time = 0.0;
-          .           
-          4 ( 0.00%)      for (const auto &stats : thread_stats_list)
-          .               {
-          1 ( 0.00%)          total_io_completed += stats.io_completed;
-          1 ( 0.00%)          total_latency += stats.total_latency;
-          1 ( 0.00%)          if (stats.min_latency < min_latency)
-          .                   {
-          .                       min_latency = stats.min_latency;
-          .                   }
-          2 ( 0.00%)          if (stats.max_latency > max_latency)
-          .                   {
-          .                       max_latency = stats.max_latency;
-          .                   }
-          1 ( 0.00%)          if (stats.total_time > total_time)
-          .                   {
-          .                       total_time = stats.total_time;
-          .                   }
-          .               }
-          .           
-          .               double temp_time = total_time * KILO * KILO; // Convert to microseconds
-          .           
-          6 ( 0.00%)      double avg_latency = total_latency / total_io_completed;
-          2 ( 0.00%)      double throughput = total_io_completed / total_time;
-          .           
-          6 ( 0.00%)      double total_data_size = total_io_completed * params.page_size;
-          2 ( 0.00%)      double total_data_size_MB = total_data_size / (KILO * KILO);
-          .           
-          .               std::cout << "Total I/O Completed: " << total_io_completed
-          .                         << "\nTotal Data Size: " << total_data_size_MB << " MB"
-          .                         << "\nTotal Time: " << total_time << " seconds"
-          .                         << "\nThroughput: " << throughput << " IOPS"
-          3 ( 0.00%)                << "\nThroughput: " << total_data_size_MB / total_time << " MB/s"
-          .                         << "\nAverage Latency: " << avg_latency << " microseconds"
-          .                         << "\nMin Latency: " << min_latency << " microseconds"
-          .                         << "\nMax Latency: " << max_latency << " microseconds" << std::endl;
-          .           
-          .               // Close the device (if not opening per thread)
-          2 ( 0.00%)      close(params.fd);
-         55 ( 0.00%)  => ???:0x000000000010b830 (1x)
-          .           
-          .               return 0;
-         14 ( 0.00%)  }         20 ( 0.00%)  => io_benchmark.cpp:benchmark_params::~benchmark_params() (1x)
-
---------------------------------------------------------------------------------
--- Auto-annotated source: /usr/include/c++/13/ostream
---------------------------------------------------------------------------------
 Ir                  
+--------------------------------------------------------------------------------
+14,341,793 (100.0%)  PROGRAM TOTALS
 
--- line 107 ----------------------------------------
-         .                  *  information, see the iomanip header.
-         .                 */
-         .                 __ostream_type&
-         .                 operator<<(__ostream_type& (*__pf)(__ostream_type&))
-         .                 {
-         .           	// _GLIBCXX_RESOLVE_LIB_DEFECTS
-         .           	// DR 60. What is a formatted input function?
-         .           	// The inserters for manipulators are *not* formatted output functions.
-         3 ( 0.00%)  	return __pf(*this);
-     2,509 ( 0.00%)  => /usr/include/c++/13/ostream:std::basic_ostream<char, std::char_traits<char> >& std::endl<char, std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&) [clone .isra.0] (2x)
-         .                 }
-         .           
-         .                 __ostream_type&
-         .                 operator<<(__ios_type& (*__pf)(__ios_type&))
-         .                 {
-         .           	// _GLIBCXX_RESOLVE_LIB_DEFECTS
-         .           	// DR 60. What is a formatted input function?
-         .           	// The inserters for manipulators are *not* formatted output functions.
--- line 123 ----------------------------------------
--- line 165 ----------------------------------------
-         .                  *  @c num_get facet) to perform numeric formatting.
-         .                 */
-         .                 __ostream_type&
-         .                 operator<<(long __n)
-         .                 { return _M_insert(__n); }
-         .           
-         .                 __ostream_type&
-         .                 operator<<(unsigned long __n)
-        16 ( 0.00%)        { return _M_insert(__n); }
-     3,025 ( 0.00%)  => ???:0x000000000010b570 (4x)
-         .           
-         .                 __ostream_type&
-         .                 operator<<(bool __n)
-         .                 { return _M_insert(__n); }
-         .           
-         .                 __ostream_type&
-         .                 operator<<(short __n);
-         .           
+--------------------------------------------------------------------------------
+Ir                  file:function
+--------------------------------------------------------------------------------
+3,200,062 (22.31%)  src/sync.cpp:io_benchmark_thread_sync(benchmark_params&, thread_stats&, unsigned long) [/home/tarun/io-microbenchmark/build/io_benchmark]
+2,700,000 (18.83%)  ./posix/../sysdeps/unix/sysv/linux/pwrite64.c:pwrite [/usr/lib/x86_64-linux-gnu/libc.so.6]
+1,600,160 (11.16%)  ./nptl/./nptl/cancellation.c:__pthread_enable_asynccancel [/usr/lib/x86_64-linux-gnu/libc.so.6]
+1,500,150 (10.46%)  ./nptl/./nptl/cancellation.c:__pthread_disable_asynccancel [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  800,045 ( 5.58%)  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_avx2_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  800,024 ( 5.58%)  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_chk_avx2_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  510,848 ( 3.56%)  ./elf/./elf/dl-lookup.c:do_lookup_x [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  500,854 ( 3.49%)  ./elf/../sysdeps/generic/dl-new-hash.h:_dl_lookup_symbol_x
+  500,005 ( 3.49%)  /usr/include/c++/13/bits/char_traits.h:io_benchmark_thread_sync(benchmark_params&, thread_stats&, unsigned long)
+  450,005 ( 3.14%)  /usr/include/c++/13/bits/stl_algo.h:main
+  200,020 ( 1.39%)  ./nptl/../nptl/descr.h:__pthread_enable_asynccancel
+  200,003 ( 1.39%)  /usr/include/c++/13/bits/basic_string.h:io_benchmark_thread_sync(benchmark_params&, thread_stats&, unsigned long)
+  200,000 ( 1.39%)  ???:0x000000000010b4c0 [???]
+  189,729 ( 1.32%)  ./elf/./elf/dl-lookup.c:_dl_lookup_symbol_x [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  175,027 ( 1.22%)  /usr/include/c++/13/bits/stl_numeric.h:main
+  148,499 ( 1.04%)  ./elf/./elf/dl-reloc.c:_dl_relocate_object [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  115,827 ( 0.81%)  ./elf/./elf/dl-lookup.c:check_match [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  112,481 ( 0.78%)  ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
+  111,491 ( 0.78%)  ./elf/./elf/do-rel.h:_dl_relocate_object
+   72,333 ( 0.50%)  ./string/../sysdeps/x86_64/multiarch/../multiarch/strcmp-sse2.S:strcmp [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+   43,380 ( 0.30%)  ./elf/./elf/dl-tunables.c:__GI___tunables_init [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+   17,196 ( 0.12%)  ./elf/./elf/dl-version.c:_dl_check_map_versions [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+   12,192 ( 0.09%)  ???:std::locale::_Impl::_M_install_facet(std::locale::id const*, std::locale::facet const*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+   10,523 ( 0.07%)  ./elf/../sysdeps/generic/ldsodefs.h:_dl_relocate_object
+    9,705 ( 0.07%)  ./elf/../sysdeps/generic/ldsodefs.h:do_lookup_x
+    9,216 ( 0.06%)  ./wcsmbs/./wcsmbs/btowc.c:btowc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    8,691 ( 0.06%)  ./elf/./elf/dl-runtime.c:_dl_fixup [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+
+--------------------------------------------------------------------------------
+-- Auto-annotated source: /usr/include/c++/13/bits/char_traits.h
+--------------------------------------------------------------------------------
+Ir               
+
+-- line 350 ----------------------------------------
+      .                 static _GLIBCXX17_CONSTEXPR void
+      .                 assign(char_type& __c1, const char_type& __c2) _GLIBCXX_NOEXCEPT
+      .                 {
+      .           #if __cpp_constexpr_dynamic_alloc
+      .           	if (std::__is_constant_evaluated())
+      .           	  std::construct_at(__builtin_addressof(__c1), __c2);
+      .           	else
+      .           #endif
+     11 ( 0.00%)  	__c1 = __c2;
+      2 ( 0.00%)        }
+      .           
+      .                 static _GLIBCXX_CONSTEXPR bool
+      .                 eq(const char_type& __c1, const char_type& __c2) _GLIBCXX_NOEXCEPT
+      .                 { return __c1 == __c2; }
+      .           
+      .                 static _GLIBCXX_CONSTEXPR bool
+      .                 lt(const char_type& __c1, const char_type& __c2) _GLIBCXX_NOEXCEPT
+      .                 {
+-- line 367 ----------------------------------------
+-- line 381 ----------------------------------------
+      .           	    for (size_t __i = 0; __i < __n; ++__i)
+      .           	      if (lt(__s1[__i], __s2[__i]))
+      .           		return -1;
+      .           	      else if (lt(__s2[__i], __s1[__i]))
+      .           		return 1;
+      .           	    return 0;
+      .           	  }
+      .           #endif
+500,015 ( 3.49%)  	return __builtin_memcmp(__s1, __s2, __n);
+      .                 }
+      .           
+      .                 static _GLIBCXX17_CONSTEXPR size_t
+      .                 length(const char_type* __s)
+      .                 {
+      .           #if __cplusplus >= 201703L
+      .           	if (std::__is_constant_evaluated())
+      .           	  return __gnu_cxx::char_traits<char_type>::length(__s);
+      .           #endif
+     18 ( 0.00%)  	return __builtin_strlen(__s);
+     96 ( 0.00%)  => ???:0x000000000010b510 (6x)
+      .                 }
+      .           
+      .                 static _GLIBCXX17_CONSTEXPR const char_type*
+      .                 find(const char_type* __s, size_t __n, const char_type& __a)
+      .                 {
+      .           	if (__n == 0)
+      .           	  return 0;
+      .           #if __cplusplus >= 201703L
+-- line 407 ----------------------------------------
+-- line 421 ----------------------------------------
+      .           	  return __gnu_cxx::char_traits<char_type>::move(__s1, __s2, __n);
+      .           #endif
+      .           	return static_cast<char_type*>(__builtin_memmove(__s1, __s2, __n));
+      .                 }
+      .           
+      .                 static _GLIBCXX20_CONSTEXPR char_type*
+      .                 copy(char_type* __s1, const char_type* __s2, size_t __n)
+      .                 {
+      8 ( 0.00%)  	if (__n == 0)
+      .           	  return __s1;
+      .           #if __cplusplus >= 202002L
+      .           	if (std::__is_constant_evaluated())
+      .           	  return __gnu_cxx::char_traits<char_type>::copy(__s1, __s2, __n);
+      .           #endif
+     11 ( 0.00%)  	return static_cast<char_type*>(__builtin_memcpy(__s1, __s2, __n));
+     32 ( 0.00%)  => ???:0x000000000010b5f0 (2x)
+      .                 }
+      .           
+      .                 static _GLIBCXX20_CONSTEXPR char_type*
+      .                 assign(char_type* __s, size_t __n, char_type __a)
+      .                 {
+      .           	if (__n == 0)
+      .           	  return __s;
+      .           #if __cplusplus >= 202002L
+-- line 443 ----------------------------------------
+
+--------------------------------------------------------------------------------
+-- Auto-annotated source: /usr/include/c++/13/bits/stl_numeric.h
+--------------------------------------------------------------------------------
+Ir               
+
+-- line 132 ----------------------------------------
+      .               _GLIBCXX20_CONSTEXPR
+      .               inline _Tp
+      .               accumulate(_InputIterator __first, _InputIterator __last, _Tp __init)
+      .               {
+      .                 // concept requirements
+      .                 __glibcxx_function_requires(_InputIteratorConcept<_InputIterator>)
+      .                 __glibcxx_requires_valid_range(__first, __last);
+      .           
+ 50,027 ( 0.35%)        for (; __first != __last; ++__first)
+125,000 ( 0.87%)  	__init = _GLIBCXX_MOVE_IF_20(__init) + *__first;
+      .                 return __init;
+      .               }
+      .           
+      .             /**
+      .              *  @brief  Accumulate values in a range with operation.
+      .              *
+      .              *  Accumulates the values in the range `[first,last)` using the function
+      .              *  object `__binary_op`.  The initial value is `__init`.  The values are
+-- line 149 ----------------------------------------
+
+--------------------------------------------------------------------------------
+-- Auto-annotated source: /usr/include/c++/13/bits/stl_algo.h
+--------------------------------------------------------------------------------
+Ir               
+
+-- line 5706 ----------------------------------------
+      .             template<typename _ForwardIterator, typename _Compare>
+      .               _GLIBCXX14_CONSTEXPR
+      .               _ForwardIterator
+      .               __max_element(_ForwardIterator __first, _ForwardIterator __last,
+      .           		  _Compare __comp)
+      .               {
+      .                 if (__first == __last) return __first;
+      .                 _ForwardIterator __result = __first;
+150,008 ( 1.05%)        while (++__first != __last)
+299,997 ( 2.09%)  	if (__comp(__result, __first))
+      .           	  __result = __first;
+      .                 return __result;
+      .               }
+      .           
+      .             /**
+      .              *  @brief  Return the maximum element in a range.
+      .              *  @ingroup sorting_algorithms
+      .              *  @param  __first  Start of range.
+-- line 5723 ----------------------------------------
+
+--------------------------------------------------------------------------------
+-- Auto-annotated source: /usr/include/c++/13/bits/basic_string.h
+--------------------------------------------------------------------------------
+Ir               
+
 -- line 181 ----------------------------------------
--- line 215 ----------------------------------------
-         .                  *  @param  __f A variable of builtin floating point type.
-         .                  *  @return  @c *this if successful
-         .                  *
-         .                  *  These functions use the stream's current locale (specifically, the
-         .                  *  @c num_get facet) to perform numeric formatting.
-         .                 */
-         .                 __ostream_type&
-         .                 operator<<(double __f)
-        27 ( 0.00%)        { return _M_insert(__f); }
-    23,540 ( 0.00%)  => ???:0x000000000010b760 (7x)
-         .           
-         .                 __ostream_type&
-         .                 operator<<(float __f)
-         .                 {
-         .           	// _GLIBCXX_RESOLVE_LIB_DEFECTS
-         .           	// 117. basic_ostream uses nonexistent num_put member functions.
-         .           	return _M_insert(static_cast<double>(__f));
-         .                 }
--- line 231 ----------------------------------------
--- line 659 ----------------------------------------
-         .             // Partial specializations
-         .             template<typename _Traits>
-         .               inline basic_ostream<char, _Traits>&
-         .               operator<<(basic_ostream<char, _Traits>& __out, const char* __s)
-         .               {
-         .                 if (!__s)
-         .           	__out.setstate(ios_base::badbit);
-         .                 else
-        91 ( 0.00%)  	__ostream_insert(__out, __s,
-    16,247 ( 0.00%)  => ???:0x000000000010b660 (22x)
-         .           			 static_cast<streamsize>(_Traits::length(__s)));
-         .                 return __out;
-         .               }
-         .           
-         .             // Signed and unsigned
-         .             template<typename _Traits>
-         .               inline basic_ostream<char, _Traits>&
-         .               operator<<(basic_ostream<char, _Traits>& __out, const signed char* __s)
--- line 675 ----------------------------------------
--- line 727 ----------------------------------------
-         .              *
-         .              *  This manipulator is often mistakenly used when a simple newline is
-         .              *  desired, leading to poor buffering performance.  See
-         .              *  https://gcc.gnu.org/onlinedocs/libstdc++/manual/streambufs.html#io.streambuf.buffering
-         .              *  for more on this subject.
-         .             */
-         .             template<typename _CharT, typename _Traits>
-         .               inline basic_ostream<_CharT, _Traits>&
-         6 ( 0.00%)      endl(basic_ostream<_CharT, _Traits>& __os)
-46,149,182 ( 1.97%)      { return flush(__os.put(__os.widen('\n'))); }
-     1,411 ( 0.00%)  => ???:0x000000000010b450 (2x)
-         .           
-         .             /**
-         .              *  @brief  Write a null character into the output sequence.
-         .              *
-         .              *  <em>Null character</em> is @c CharT() by definition.  For CharT
-         .              *  of @c char, this correctly writes the ASCII @c NUL character
-         .              *  string terminator.
-         .             */
--- line 744 ----------------------------------------
--- line 750 ----------------------------------------
-         .             /**
-         .              *  @brief  Flushes the output stream.
-         .              *
-         .              *  This manipulator simply calls the stream's @c flush() member function.
-         .             */
-         .             template<typename _CharT, typename _Traits>
-         .               inline basic_ostream<_CharT, _Traits>&
-         .               flush(basic_ostream<_CharT, _Traits>& __os)
-         2 ( 0.00%)      { return __os.flush(); }
-     1,060 ( 0.00%)  => ???:0x000000000010b580 (2x)
-         .           
-         .           #if __cplusplus >= 201103L
-         .             // C++11 27.7.3.9 Rvalue stream insertion [ostream.rvalue]
-         .             // _GLIBCXX_RESOLVE_LIB_DEFECTS
-         .             // 1203. More useful rvalue stream insertion
-         .           
-         .           #if __cpp_lib_concepts
-         .             // Use concepts if possible because they're cheaper to evaluate.
--- line 766 ----------------------------------------
+      .                 struct _Alloc_hider : allocator_type // TODO check __is_final
+      .                 {
+      .           #if __cplusplus < 201103L
+      .           	_Alloc_hider(pointer __dat, const _Alloc& __a = _Alloc())
+      .           	: allocator_type(__a), _M_p(__dat) { }
+      .           #else
+      .           	_GLIBCXX20_CONSTEXPR
+      .           	_Alloc_hider(pointer __dat, const _Alloc& __a)
+     18 ( 0.00%)  	: allocator_type(__a), _M_p(__dat) { }
+      .           
+      .           	_GLIBCXX20_CONSTEXPR
+      .           	_Alloc_hider(pointer __dat, _Alloc&& __a = _Alloc())
+      .           	: allocator_type(std::move(__a)), _M_p(__dat) { }
+      .           #endif
+      .           
+      .           	pointer _M_p; // The actual data.
+      .                 };
+-- line 197 ----------------------------------------
+-- line 210 ----------------------------------------
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 void
+      .                 _M_data(pointer __p)
+      .                 { _M_dataplus._M_p = __p; }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 void
+      .                 _M_length(size_type __length)
+      7 ( 0.00%)        { _M_string_length = __length; }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 pointer
+      .                 _M_data() const
+     14 ( 0.00%)        { return _M_dataplus._M_p; }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 pointer
+      .                 _M_local_data()
+      .                 {
+      .           #if __cplusplus >= 201103L
+      4 ( 0.00%)  	return std::pointer_traits<pointer>::pointer_to(*_M_local_buf);
+      .           #else
+      .           	return pointer(_M_local_buf);
+      .           #endif
+      .                 }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 const_pointer
+      .                 _M_local_data() const
+      .                 {
+      .           #if __cplusplus >= 201103L
+      3 ( 0.00%)  	return std::pointer_traits<const_pointer>::pointer_to(*_M_local_buf);
+      .           #else
+      .           	return const_pointer(_M_local_buf);
+      .           #endif
+      .                 }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 void
+      .                 _M_capacity(size_type __capacity)
+-- line 249 ----------------------------------------
+-- line 256 ----------------------------------------
+      .           	_M_length(__n);
+      .           	traits_type::assign(_M_data()[__n], _CharT());
+      .                 }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 bool
+      .                 _M_is_local() const
+      .                 {
+     16 ( 0.00%)  	if (_M_data() == _M_local_data())
+      .           	  {
+      .           	    if (_M_string_length > _S_local_capacity)
+      .           	      __builtin_unreachable();
+      .           	    return true;
+      .           	  }
+      .           	return false;
+      .                 }
+      .           
+-- line 272 ----------------------------------------
+-- line 419 ----------------------------------------
+      .                 }
+      .           
+      .                 // When __n = 1 way faster than the general multichar
+      .                 // traits_type::copy/move/assign.
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 static void
+      .                 _S_copy(_CharT* __d, const _CharT* __s, size_type __n)
+      .                 {
+      8 ( 0.00%)  	if (__n == 1)
+      .           	  traits_type::assign(*__d, *__s);
+      .           	else
+      .           	  traits_type::copy(__d, __s, __n);
+      1 ( 0.00%)        }
+      .           
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 static void
+      .                 _S_move(_CharT* __d, const _CharT* __s, size_type __n)
+      .                 {
+      .           	if (__n == 1)
+      .           	  traits_type::assign(*__d, *__s);
+      .           	else
+-- line 439 ----------------------------------------
+-- line 616 ----------------------------------------
+      .                  *  has no special meaning.
+      .                  */
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 basic_string(const _CharT* __s, size_type __n,
+      .           		   const _Alloc& __a = _Alloc())
+      .                 : _M_dataplus(_M_local_data(), __a)
+      .                 {
+      .           	// NB: Not required, but considered best practice.
+      2 ( 0.00%)  	if (__s == 0 && __n > 0)
+      .           	  std::__throw_logic_error(__N("basic_string: "
+      .           				       "construction from null is not valid"));
+      .           	_M_construct(__s, __s + __n, std::forward_iterator_tag());
+      .                 }
+      .           
+      .                 /**
+      .                  *  @brief  Construct string as copy of a C string.
+      .                  *  @param  __s  Source C string.
+-- line 632 ----------------------------------------
+-- line 637 ----------------------------------------
+      .                 // 3076. basic_string CTAD ambiguity
+      .                 template<typename = _RequireAllocator<_Alloc>>
+      .           #endif
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 basic_string(const _CharT* __s, const _Alloc& __a = _Alloc())
+      .                 : _M_dataplus(_M_local_data(), __a)
+      .                 {
+      .           	// NB: Not required, but considered best practice.
+      6 ( 0.00%)  	if (__s == 0)
+      .           	  std::__throw_logic_error(__N("basic_string: "
+      .           				       "construction from null is not valid"));
+      .           	const _CharT* __end = __s + traits_type::length(__s);
+      .           	_M_construct(__s, __end, forward_iterator_tag());
+      .                 }
+      .           
+      .                 /**
+      .                  *  @brief  Construct string as multiple characters.
+-- line 653 ----------------------------------------
+-- line 1064 ----------------------------------------
+      .           
+      .               public:
+      .                 // Capacity:
+      .                 ///  Returns the number of characters in the string, not including any
+      .                 ///  null-termination.
+      .                 _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
+      .                 size_type
+      .                 size() const _GLIBCXX_NOEXCEPT
+      2 ( 0.00%)        { return _M_string_length; }
+      .           
+      .                 ///  Returns the number of characters in the string, not including any
+      .                 ///  null-termination.
+      .                 _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
+      .                 size_type
+      .                 length() const _GLIBCXX_NOEXCEPT
+      .                 { return _M_string_length; }
+      .           
+-- line 1080 ----------------------------------------
+-- line 1676 ----------------------------------------
+      .                  *  The data is copied, so there is no dependence on @a __s once the
+      .                  *  function returns.
+      .                  */
+      .                 _GLIBCXX20_CONSTEXPR
+      .                 basic_string&
+      .                 assign(const _CharT* __s)
+      .                 {
+      .           	__glibcxx_requires_string(__s);
+     16 ( 0.00%)  	return _M_replace(size_type(0), this->size(), __s,
+  1,242 ( 0.01%)  => ???:0x000000000010b770 (3x)
+      .           			  traits_type::length(__s));
+      .                 }
+      .           
+      .                 /**
+      .                  *  @brief  Set value to multiple characters.
+      .                  *  @param __n  Length of the resulting string.
+      .                  *  @param __c  The character to use.
+      .                  *  @return  Reference to this string.
+-- line 1692 ----------------------------------------
+-- line 3723 ----------------------------------------
+      .              */
+      .             template<typename _CharT, typename _Traits, typename _Alloc>
+      .               _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
+      .               inline bool
+      .               operator==(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      .           	       const _CharT* __rhs)
+      .               {
+      .                 return __lhs.size() == _Traits::length(__rhs)
+200,006 ( 1.39%)  	       && !_Traits::compare(__lhs.data(), __rhs, __lhs.size());
+      .               }
+      .           
+      .           #if __cpp_lib_three_way_comparison
+      .             /**
+      .              *  @brief  Three-way comparison of a string and a C string.
+      .              *  @param __lhs  A string.
+      .              *  @param __rhs  A null-terminated string.
+      .              *  @return  A value indicating whether `__lhs` is less than, equal to,
+-- line 3739 ----------------------------------------
+-- line 4029 ----------------------------------------
+      .              */
+      .             template<typename _CharT, typename _Traits, typename _Alloc>
+      .               inline basic_ostream<_CharT, _Traits>&
+      .               operator<<(basic_ostream<_CharT, _Traits>& __os,
+      .           	       const basic_string<_CharT, _Traits, _Alloc>& __str)
+      .               {
+      .                 // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      .                 // 586. string inserter not a formatted function
+     15 ( 0.00%)        return __ostream_insert(__os, __str.data(), __str.size());
+    800 ( 0.01%)  => ???:0x000000000010b670 (3x)
+      .               }
+      .           
+      .             /**
+      .              *  @brief  Read a line from stream into a string.
+      .              *  @param __is  Input stream.
+      .              *  @param __str  Buffer to store into.
+      .              *  @param __delim  Character marking end of line.
+      .              *  @return  Reference to the input stream.
+-- line 4045 ----------------------------------------
 
 --------------------------------------------------------------------------------
--- Auto-annotated source: /usr/include/c++/13/bits/stl_algobase.h
+-- Auto-annotated source: src/sync.cpp
 --------------------------------------------------------------------------------
-Ir                  
+Ir               
 
--- line 230 ----------------------------------------
-         .             template<typename _Tp>
-         .               _GLIBCXX14_CONSTEXPR
-         .               inline const _Tp&
-         .               min(const _Tp& __a, const _Tp& __b)
-         .               {
-         .                 // concept requirements
-         .                 __glibcxx_function_requires(_LessThanComparableConcept<_Tp>)
-         .                 //return __b < __a ? __b : __a;
-46,649,160 ( 1.99%)        if (__b < __a)
-         .           	return __b;
-         .                 return __a;
-         .               }
-         .           
-         .             /**
-         .              *  @brief This does what you think it does.
-         .              *  @ingroup sorting_algorithms
-         .              *  @param  __a  A thing of arbitrary type.
--- line 246 ----------------------------------------
--- line 254 ----------------------------------------
-         .             template<typename _Tp>
-         .               _GLIBCXX14_CONSTEXPR
-         .               inline const _Tp&
-         .               max(const _Tp& __a, const _Tp& __b)
-         .               {
-         .                 // concept requirements
-         .                 __glibcxx_function_requires(_LessThanComparableConcept<_Tp>)
-         .                 //return  __a < __b ? __b : __a;
-         2 ( 0.00%)        if (__a < __b)
-         .           	return __b;
-         .                 return __a;
-         .               }
-         .           
-         .             /**
-         .              *  @brief This does what you think it does.
-         .              *  @ingroup sorting_algorithms
-         .              *  @param  __a  A thing of arbitrary type.
--- line 270 ----------------------------------------
--- line 910 ----------------------------------------
-         .           
-         .             template<typename _ForwardIterator, typename _Tp>
-         .               _GLIBCXX20_CONSTEXPR
-         .               inline typename
-         .               __gnu_cxx::__enable_if<!__is_scalar<_Tp>::__value, void>::__type
-         .               __fill_a1(_ForwardIterator __first, _ForwardIterator __last,
-         .           	      const _Tp& __value)
-         .               {
-       768 ( 0.00%)        for (; __first != __last; ++__first)
-       510 ( 0.00%)  	*__first = __value;
-         .               }
-         .           
-         .             template<typename _ForwardIterator, typename _Tp>
-         .               _GLIBCXX20_CONSTEXPR
-         .               inline typename
-         .               __gnu_cxx::__enable_if<__is_scalar<_Tp>::__value, void>::__type
-         .               __fill_a1(_ForwardIterator __first, _ForwardIterator __last,
-         .           	      const _Tp& __value)
-         .               {
-         .                 const _Tp __tmp = __value;
-         7 ( 0.00%)        for (; __first != __last; ++__first)
-         9 ( 0.00%)  	*__first = __tmp;
- 8,000,158 ( 0.34%)  => ???:0x000000000010b540 (3x)
-         .               }
-         .           
-         .             // Specialization: for char types we can use memset.
-         .             template<typename _Tp>
-         .               _GLIBCXX20_CONSTEXPR
-         .               inline typename
-         .               __gnu_cxx::__enable_if<__is_byte<_Tp>::__value, void>::__type
-         .               __fill_a1(_Tp* __first, _Tp* __last, const _Tp& __c)
--- line 939 ----------------------------------------
--- line 1115 ----------------------------------------
-         .               _GLIBCXX20_CONSTEXPR
-         .               inline _OutputIterator
-         .               __fill_n_a(_OutputIterator __first, _Size __n, const _Tp& __value,
-         .           	       std::random_access_iterator_tag)
-         .               {
-         .           #if __cplusplus >= 201103L
-         .                 static_assert(is_integral<_Size>{}, "fill_n must pass integral size");
-         .           #endif
-        10 ( 0.00%)        if (__n <= 0)
-         .           	return __first;
-         .           
-         .                 __glibcxx_requires_can_increment(__first, __n);
-         .           
-         .                 std::__fill_a(__first, __first + __n, __value);
-         1 ( 0.00%)        return __first + __n;
-         .               }
-         .           
-         .             /**
-         .              *  @brief Fills the range [first,first+n) with copies of value.
-         .              *  @ingroup mutating_algorithms
-         .              *  @param  __first  An output iterator.
-         .              *  @param  __n      The count of copies to perform.
-         .              *  @param  __value  A reference-to-const of arbitrary type.
--- line 1137 ----------------------------------------
-
---------------------------------------------------------------------------------
--- Auto-annotated source: /usr/include/liburing.h
---------------------------------------------------------------------------------
-Ir                  
-
--- line 306 ----------------------------------------
-         .           {
-         .           	if (nr) {
-         .           		struct io_uring_cq *cq = &ring->cq;
-         .           
-         .           		/*
-         .           		 * Ensure that the kernel only sees the new value of the head
-         .           		 * index after the CQEs have been read.
-         .           		 */
-   749,997 ( 0.03%)  		io_uring_smp_store_release(cq->khead, *cq->khead + nr);
-         .           	}
-         .           }
-         .           
-         .           /*
-         .            * Must be called after io_uring_{peek,wait}_cqe() after the cqe has
-         .            * been processed by the application.
-         .            */
-         .           IOURINGINLINE void io_uring_cqe_seen(struct io_uring *ring,
--- line 322 ----------------------------------------
--- line 331 ----------------------------------------
-         .            */
-         .           
-         .           /*
-         .            * Associate pointer @data with the sqe, for later retrieval from the cqe
-         .            * at command completion time with io_uring_cqe_get_data().
-         .            */
-         .           IOURINGINLINE void io_uring_sqe_set_data(struct io_uring_sqe *sqe, void *data)
-         .           {
-   500,000 ( 0.02%)  	sqe->user_data = (unsigned long) data;
-         .           }
-         .           
-         .           IOURINGINLINE void *io_uring_cqe_get_data(const struct io_uring_cqe *cqe)
-         .           {
-   500,000 ( 0.02%)  	return (void *) (uintptr_t) cqe->user_data;
-         .           }
-         .           
-         .           /*
-         .            * Assign a 64-bit value to this sqe, which can get retrieved at completion
-         .            * time with io_uring_cqe_get_data64. Just like the non-64 variants, except
-         .            * these store a 64-bit type rather than a data pointer.
-         .            */
-         .           IOURINGINLINE void io_uring_sqe_set_data64(struct io_uring_sqe *sqe,
--- line 352 ----------------------------------------
--- line 377 ----------------------------------------
-         .           	/* 0 means no fixed files, indexes should be encoded as "index + 1" */
-         .           	sqe->file_index = file_index + 1;
-         .           }
-         .           
-         .           IOURINGINLINE void io_uring_prep_rw(int op, struct io_uring_sqe *sqe, int fd,
-         .           				    const void *addr, unsigned len,
-         .           				    __u64 offset)
-         .           {
-   500,000 ( 0.02%)  	sqe->opcode = (__u8) op;
-   500,000 ( 0.02%)  	sqe->flags = 0;
- 1,000,000 ( 0.04%)  	sqe->ioprio = 0;
-   500,000 ( 0.02%)  	sqe->fd = fd;
- 1,500,000 ( 0.06%)  	sqe->off = offset;
-   500,000 ( 0.02%)  	sqe->addr = (unsigned long) addr;
-   500,000 ( 0.02%)  	sqe->len = len;
-   500,000 ( 0.02%)  	sqe->rw_flags = 0;
-   500,000 ( 0.02%)  	sqe->buf_index = 0;
-         .           	sqe->personality = 0;
-         .           	sqe->file_index = 0;
- 1,000,000 ( 0.04%)  	sqe->addr3 = 0;
-         .           	sqe->__pad2[0] = 0;
-         .           }
-         .           
-         .           /*
-         .            * io_uring_prep_splice() - Either @fd_in or @fd_out must be a pipe.
-         .            *
-         .            * - If @fd_in refers to a pipe, @off_in is ignored and must be set to -1.
-         .            *
--- line 404 ----------------------------------------
--- line 723 ----------------------------------------
-         .           	io_uring_prep_rw(IORING_OP_READ, sqe, fd, buf, nbytes, offset);
-         .           }
-         .           
-         .           IOURINGINLINE void io_uring_prep_write(struct io_uring_sqe *sqe, int fd,
-         .           				       const void *buf, unsigned nbytes,
-         .           				       __u64 offset)
-         .           {
-         .           	io_uring_prep_rw(IORING_OP_WRITE, sqe, fd, buf, nbytes, offset);
-   500,000 ( 0.02%)  }
-         .           
-         .           struct statx;
-         .           IOURINGINLINE void io_uring_prep_statx(struct io_uring_sqe *sqe, int dfd,
-         .           				       const char *path, int flags,
-         .           				       unsigned mask, struct statx *statxbuf)
-         .           {
-         .           	io_uring_prep_rw(IORING_OP_STATX, sqe, dfd, path, mask,
-         .           				(__u64) (unsigned long) statxbuf);
--- line 739 ----------------------------------------
--- line 1152 ----------------------------------------
-         .           }
-         .           
-         .           /*
-         .            * Returns number of unconsumed (if SQPOLL) or unsubmitted entries exist in
-         .            * the SQ ring
-         .            */
-         .           IOURINGINLINE unsigned io_uring_sq_ready(const struct io_uring *ring)
-         .           {
-46,649,160 ( 1.99%)  	unsigned khead = *ring->sq.khead;
-         .           
-         .           	/*
-         .           	 * Without a barrier, we could miss an update and think the SQ wasn't
-         .           	 * ready. We don't need the load acquire for non-SQPOLL since then we
-         .           	 * drive updates.
-         .           	 */
-46,649,160 ( 1.99%)  	if (ring->flags & IORING_SETUP_SQPOLL)
-         .           		khead = io_uring_smp_load_acquire(ring->sq.khead);
-         .           
-         .           	/* always use real head, to avoid losing sync for short submit */
-23,324,580 ( 1.00%)  	return ring->sq.sqe_tail - khead;
-         .           }
-         .           
-         .           /*
-         .            * Returns how much space is left in the SQ ring.
-         .            */
-         .           IOURINGINLINE unsigned io_uring_sq_space_left(const struct io_uring *ring)
-         .           {
-46,649,160 ( 1.99%)  	return ring->sq.ring_entries - io_uring_sq_ready(ring);
-         .           }
-         .           
-         .           /*
-         .            * Only applicable when using SQPOLL - allows the caller to wait for space
-         .            * to free up in the SQ ring, which happens when the kernel side thread has
-         .            * consumed one or more entries. If the SQ ring is currently non-full, no
-         .            * action is taken. Note: may return -EINVAL if the kernel doesn't support
-         .            * this feature.
--- line 1187 ----------------------------------------
--- line 1341 ----------------------------------------
-         .            * when it's ready to tell the kernel about it. The caller may call this
-         .            * function multiple times before calling io_uring_submit().
-         .            *
-         .            * Returns a vacant sqe, or NULL if we're full.
-         .            */
-         .           IOURINGINLINE struct io_uring_sqe *_io_uring_get_sqe(struct io_uring *ring)
-         .           {
-         .           	struct io_uring_sq *sq = &ring->sq;
-   998,046 ( 0.04%)  	unsigned int head, next = sq->sqe_tail + 1;
-         .           	int shift = 0;
-         .           
- 1,500,000 ( 0.06%)  	if (ring->flags & IORING_SETUP_SQE128)
-         .           		shift = 1;
- 1,000,000 ( 0.04%)  	if (!(ring->flags & IORING_SETUP_SQPOLL))
-   500,000 ( 0.02%)  		head = IO_URING_READ_ONCE(*sq->khead);
-         .           	else
-         .           		head = io_uring_smp_load_acquire(sq->khead);
-         .           
- 2,000,000 ( 0.09%)  	if (next - head <= sq->ring_entries) {
-         .           		struct io_uring_sqe *sqe;
-         .           
- 2,000,000 ( 0.09%)  		sqe = &sq->sqes[(sq->sqe_tail & sq->ring_mask) << shift];
-   500,000 ( 0.02%)  		sq->sqe_tail = next;
-         .           		return sqe;
-         .           	}
-         .           
-         .           	return NULL;
-         .           }
-         .           
-         .           /*
-         .            * Return the appropriate mask for a buffer ring of size 'ring_entries'
--- line 1371 ----------------------------------------
-
+      .           #include "sync.h"
+      .           #include "config.h"
+      .           
+      .           void io_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
+     13 ( 0.00%)  {
+      .           
+      .               // Generate offsets
+      1 ( 0.00%)      std::vector<uint64_t> offsets(params.io);
+      .               if (params.seq_or_rand == "seq")
+      .               {
+400,006 ( 2.79%)          for (uint64_t i = 0; i < params.io; ++i)
+      .                   {
+400,005 ( 2.79%)              offsets[i] = ((i * params.page_size) + thread_id * params.page_size) % params.device_size;
+      .                   }
+      .               }
+      .               else if (params.seq_or_rand == "rand")
+      .               {
+      .                   std::mt19937_64 rng(std::random_device{}() + thread_id);
+      .                   std::uniform_int_distribution<uint64_t> dist(0, params.total_num_pages - 1);
+      .                   for (uint64_t i = 0; i < params.io; ++i)
+      .                   {
+-- line 21 ----------------------------------------
+-- line 26 ----------------------------------------
+      .               {
+      .                   throw std::runtime_error("Invalid method: " + params.seq_or_rand);
+      .               }
+      .           
+      .           
+      .           
+      .               // allocate buffer
+      .               char *buffer = nullptr;
+      5 ( 0.00%)      if (posix_memalign((void **)&buffer, params.page_size, params.page_size) != 0)
+    495 ( 0.00%)  => ???:0x000000000010b540 (1x)
+      .               {
+      .                   throw std::runtime_error("Error allocating buffer: " + std::string(strerror(errno)));
+      .               }
+      .           
+      .               double submission_time = 0;
+      .               double completion_time = 0;
+      .               // stats.latencies.resize(params.io); // pre-allocate space for latencies
+      7 ( 0.00%)      stats.latencies = (uint64_t *)malloc(params.io * sizeof(uint64_t));
+    403 ( 0.00%)  => ???:0x000000000010b700 (1x)
+      .               memset(stats.latencies, 0, params.io * sizeof(uint64_t));
+      .               int max_retries = 5;                                    // Maximum number of retries
+      .           
+      2 ( 0.00%)      auto start_time = std::chrono::high_resolution_clock::now();
+    863 ( 0.01%)  => ???:0x000000000010b470 (1x)
+      .           
+      .               // if its sequential, use preadv/pwritev but if its random, use pread/pwrite
+      .               // since we are using synchronous I/O, we can use pread/pwrite and cap the queue depth to 1
+400,006 ( 2.79%)      for (uint64_t i = 0; i < params.io; ++i)
+      .               {
+      .                   bool success = false;                                   // Flag to indicate if the operation succeeded
+200,000 ( 1.39%)          int attempt = 0;                                        // Attempt counter
+      .                   // submission_time = get_current_time_ns(); // Record the first submission time
+      .           
+      .                   while (!success && attempt < max_retries)
+      .                   {
+      .                       try
+      .                       {
+      .                           if (params.read_or_write == "write")
+      .                           {
+      .                               // Write operation
+200,000 ( 1.39%)                      ssize_t bytes_written = pwrite(params.fd, buffer, params.page_size, offsets[i]);
+6,200,000 (43.23%)  => ???:0x000000000010b4c0 (100,000x)
+400,000 ( 2.79%)                      if (bytes_written == params.page_size)
+      .                               {
+      .                                   success = true; // Mark operation as successful
+      .                                   break;
+      .                               }
+      .                           }
+      .                           else
+      .                           {
+      .                               // Read operation
+200,000 ( 1.39%)                      ssize_t bytes_read = pread(params.fd, buffer, params.page_size, offsets[i]);
+      .                               if (bytes_read == params.page_size)
+      .                               {
+      .                                   success = true; // Mark operation as successful
+      .                                   break;
+      .                               }
+      .                           }
+      .                       }
+      .                       catch (const std::runtime_error &e)
+-- line 81 ----------------------------------------
+-- line 92 ----------------------------------------
+      .                           }
+      .                       }
+      .                   }
+      .                   // Record the completion time after successful operation
+      .                   // completion_time = get_current_time_ns();
+      .           
+      .                   // Calculate latency
+      .                   // stats.latencies[i] = completion_time - submission_time;;
+100,000 ( 0.70%)          stats.io_completed++;
+      .               }
+      .           
+      1 ( 0.00%)      auto end_time = std::chrono::high_resolution_clock::now();
+     31 ( 0.00%)  => ???:0x000000000010b470 (1x)
+      1 ( 0.00%)      stats.total_time = std::chrono::duration<double>(end_time - start_time).count();
+      .           
+      .               // convert latency to microseconds
+300,004 ( 2.09%)      for (uint64_t i = 0; i < params.io; ++i)
+      .               {
+600,002 ( 4.18%)          stats.latencies[i] /= 1000;
+      .               }
+      .           
+      .           
+      .               // Free buffer
+      2 ( 0.00%)      free(buffer);
+    249 ( 0.00%)  => ???:0x000000000010b6a0 (1x)
+      7 ( 0.00%)  }
 --------------------------------------------------------------------------------
 The following files chosen for auto-annotation could not be found:
 --------------------------------------------------------------------------------
+  ./elf/../sysdeps/generic/dl-new-hash.h
+  ./elf/../sysdeps/generic/ldsodefs.h
+  ./elf/../sysdeps/x86_64/dl-machine.h
+  ./elf/./elf/dl-lookup.c
+  ./elf/./elf/dl-reloc.c
+  ./elf/./elf/dl-runtime.c
+  ./elf/./elf/dl-tunables.c
+  ./elf/./elf/dl-version.c
+  ./elf/./elf/do-rel.h
+  ./nptl/../nptl/descr.h
+  ./nptl/./nptl/cancellation.c
+  ./posix/../sysdeps/unix/sysv/linux/pwrite64.c
+  ./string/../sysdeps/x86_64/multiarch/../multiarch/strcmp-sse2.S
   ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S
-  ./time/../sysdeps/unix/sysv/linux/clock_gettime.c
+  ./wcsmbs/./wcsmbs/btowc.c
 
 --------------------------------------------------------------------------------
-Ir                   
+Ir                 
 --------------------------------------------------------------------------------
-850,054,797 (36.28%)  events annotated
+4,525,277 (31.55%)  events annotated
 

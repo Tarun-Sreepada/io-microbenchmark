@@ -2,16 +2,17 @@
 
 # Exit immediately if a command exits with a non-zero status
 set -e
+# sudo fio --name=test --rw=read --ioengine=sync --direct=1 --iodepth=32 --bs=4k --numjobs=1 --filename=/dev/nvme0n1 --ramp_time=10s --runtime=60
 
 # Variables
 IO_BENCHMARK="./build/io_benchmark"
 LOCATION="/dev/nvme0n1"
-QUEUE_DEPTH=256
-IO=500000
+QUEUE_DEPTH=1
+IO=1000000
 METHOD="seq"
-TYPE="write"
+TYPE="read"
 THREADS=1
-CALLGRIND_OUT="callgrind.out.$(date +%s)"  # Unique filename based on timestamp
+CALLGRIND_OUT="/tmp/callgrind.out.$(date +%s)"  # Unique filename based on timestamp
 
 # Check if io_benchmark executable exists
 if [ ! -x "$IO_BENCHMARK" ]; then
@@ -28,7 +29,8 @@ valgrind --tool=callgrind --callgrind-out-file="$CALLGRIND_OUT" \
     --io="$IO" \
     --method="$METHOD" \
     --threads="$THREADS" \
-    --type="$TYPE" -y
+    --type="$TYPE" -y \
+    --sync
 
 echo "Valgrind profiling completed. Output file: $CALLGRIND_OUT"
 
