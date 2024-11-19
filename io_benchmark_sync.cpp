@@ -141,6 +141,8 @@ void io_benchmark_thread(benchmark_params &params, uint64_t thread_id, thread_st
 
     uint64_t submitted = 0;
 
+    std::vector<uint64_t> latencies(params.io);
+
     while (stats.io_completed < params.io) {
         // Submit up to queue depth of requests
         uint64_t batch_size = std::min(params.queue_depth, params.io - submitted);
@@ -157,31 +159,38 @@ void io_benchmark_thread(benchmark_params &params, uint64_t thread_id, thread_st
 
         ssize_t bytes;
 
-        uint64_t submit_time = get_current_time_ns();
-        if (params.read_or_write == "read") {
-            bytes = preadv(fd, iovecs.data(), batch_size, batch_offsets[0]);
-        } else {
-            bytes = pwritev(fd, iovecs.data(), batch_size, batch_offsets[0]);
-        }
-
-        if (bytes < 0) {
-            std::cerr << "Thread " << thread_id << " - I/O error: " << strerror(errno) << std::endl;
-            break;
-        }
-
-        // Process the completed requests and update statistics
-        uint64_t latency = get_current_time_ns() - submit_time;
-
         for (uint64_t i = 0; i < batch_size; ++i) {
-            stats.io_completed++;
-            stats.total_latency += latency;
-            stats.min_latency = std::min(stats.min_latency, static_cast<double>(latency));
-            stats.max_latency = std::max(stats.max_latency, static_cast<double>(latency));
+            uint64_t submit_time = get_current_time_ns();
+            if (params.read_or_write == "read") {
+                bytes = pread(fd, buffers[i % params.queue_depth], params.page_size, batch_offsets[i]);
+            } else {
+                bytes = pwrite(fd, buffers[i % params.queue_depth], params.page_size, batch_offsets[i]);
+            }
+            uint64_t completion_time = get_current_time_ns();
+            uint64_t latency = completion_time - submit_time;
+            latencies[submitted + i] = latency;
         }
+
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
     stats.total_time = std::chrono::duration<double>(end_time - start_time).count();
+
+    // Calculate statistics
+    for (uint64_t i = 0; i < params.io; ++i) {
+        stats.total_latency += latencies[i];
+        if (latencies[i] < stats.min_latency) {
+            stats.min_latency = latencies[i];
+        }
+        if (latencies[i] > stats.max_latency) {
+            stats.max_latency = latencies[i];
+        }
+    }
+
+    // convert nanoseconds to microseconds
+    stats.total_latency /= 1000;
+    stats.min_latency /= 1000;
+    stats.max_latency /= 1000;
 
     // Free buffers
     for (auto buf : buffers) {

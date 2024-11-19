@@ -145,11 +145,6 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
 
     struct io_uring_params params_ring;
     memset(&params_ring, 0, sizeof(params_ring));
-    params_ring.flags = IORING_SETUP_SQPOLL | IORING_SETUP_IOPOLL;
-    params_ring.sq_thread_idle = 1000;
-    params_ring.sq_thread_cpu = thread_id % std::thread::hardware_concurrency(); // Pin to CPU 
-    params_ring.cq_entries = params.queue_depth * 2; // Adequate CQ entries
-    params_ring.sq_entries = params.queue_depth; // Adequate SQ entries
     int ret;
 
     // Initialize io_uring for this thread
@@ -167,22 +162,6 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
     if (ret != 0) {
         std::cerr << "Thread " << thread_id << " - Failed to set CPU affinity: " << strerror(ret) << std::endl;
         // Proceeding without affinity if setting fails
-    }
-
-    // Allocate buffers and iovecs
-    std::vector<char*> buffers(params.queue_depth);
-    std::vector<struct iovec> iovecs(params.queue_depth);
-    for (uint64_t i = 0; i < params.queue_depth; ++i) {
-        if (posix_memalign((void**)&buffers[i], params.page_size, params.page_size) != 0) {
-            std::cerr << "Thread " << thread_id << " - Error allocating aligned memory\n";
-            exit(1);
-        }
-        // Fill the buffer with data
-        memset(buffers[i], 'A', params.page_size);
-
-        // Initialize iovec
-        iovecs[i].iov_base = buffers[i];
-        iovecs[i].iov_len = params.page_size;
     }
 
     // Generate offsets
@@ -211,6 +190,16 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
+    // Prepare buffers for I/O operations
+    std::vector<void*> buffers(params.queue_depth);
+    for (uint64_t i = 0; i < params.queue_depth; ++i) {
+        if (posix_memalign(&buffers[i], params.page_size, params.page_size) != 0) {
+            std::cerr << "Thread " << thread_id << " - Error allocating aligned memory" << std::endl;
+            exit(1);
+        }
+    }
+    
+
     uint64_t submitted = 0, completed = 0;
     std::vector<uint64_t> latencies(params.io);
 
@@ -230,7 +219,14 @@ void io_benchmark_thread(benchmark_params &params, thread_stats &stats, uint64_t
             latencies[submitted + i] = get_current_time_ns();
 
             // Prepare the I/O operation with a single iovec
-            io_uring_prep_read_or_write(sqe, params.fd, &iovecs[index], 1, offset, params.read_or_write);
+            // io_uring_prep_read_or_write(sqe, params.fd, &iovecs[index], 1, offset, params.read_or_write);
+            if (params.read_or_write == "read") {
+                // io_uring_prep_readv(sqe, params.fd, &iovecs[index], 1, offset);
+                io_uring_prep_read(sqe, params.fd, buffers[index], params.page_size, offset);
+            } else {
+                // io_uring_prep_writev(sqe, params.fd, &iovecs[index], 1, offset);
+                io_uring_prep_write(sqe, params.fd, buffers[index], params.page_size, offset);
+            }
 
             io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(submitted + i));
         }
