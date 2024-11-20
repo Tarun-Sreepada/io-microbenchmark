@@ -117,7 +117,7 @@ void io_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uin
                 stats_buffer << "\rThread " << thread_id
                              << ": IOPS = " << std::fixed << std::setprecision(2) << iops
                              << ", Throughput = " << throughput / 1e6 << " MB/s"
-                             << ", Remaining Time = " << std::fixed << std::setprecision(2)
+                             << ", Elapsed Time = " << std::fixed << std::setprecision(2)
                              << (elapsed_time) << "s";
 
                 std::cout << stats_buffer.str() << std::flush;
