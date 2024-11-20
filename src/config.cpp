@@ -51,12 +51,9 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
             case 'q': params.queue_depth = std::stoull(optarg); break;
             case 's': 
                 params.use_sync = true; 
-                std::cout << "Sync flag set\n";
-
                 break;
             case 'a': 
                 params.use_sync = false; 
-                std::cout << "Async flag set\n";
                 break;
             case 'y': params.skip_confirmation = true; break;
             case 'h': print_help(argv[0]); exit(0);
@@ -71,9 +68,6 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
         if (params.duration == 0) {
             std::cerr << "Error: --time requires --duration to be specified with a non-zero value.\n";
             exit(1);
-        }
-        if (params.io != 10000) {
-            std::cout << "Warning: --time mode overrides --io parameter.\n";
         }
     }
 
@@ -115,7 +109,7 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
 
     // if write add flag O_SYNC to ensure data is written to disk
     if (params.read_or_write == "write") {
-        params.fd = open(params.location.c_str(), O_RDWR | O_DIRECT | O_SYNC);
+        params.fd = open(params.location.c_str(), O_RDWR | O_DIRECT);
     } else {
         params.fd = open(params.location.c_str(), O_RDONLY | O_DIRECT);
     }

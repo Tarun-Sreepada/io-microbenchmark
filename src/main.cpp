@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
         total_time = std::max(total_time, stats.total_time);
     }
 
-    double avg_latency = total_latency / total_io_completed;
+    double avg_latency = (total_time * 1e6) / total_io_completed;
     double throughput = double(total_io_completed) / total_time;
 
     double total_data_size = total_io_completed * params.page_size;
@@ -75,9 +75,9 @@ int main(int argc, char *argv[])
               << "\nTotal Time: " << total_time << " seconds"
               << "\nThroughput: " << throughput << " IOPS"
               << "\nBandwidth: " << total_data_size_MB / total_time << " MB/s"
-              << "\nAverage Latency: " << avg_latency << " microseconds"
-              << "\nMin Latency: " << min_latency << " microseconds"
-              << "\nMax Latency: " << max_latency << " microseconds" << std::endl;
+              << "\nAverage Latency: " << avg_latency << " microseconds" << std::endl;
+            //   << "\nMin Latency: " << min_latency << " microseconds"
+            //   << "\nMax Latency: " << max_latency << " microseconds" << std::endl;
 
     // stop time updater thread
     // keep_running.store(false);

@@ -63,6 +63,7 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "config.h": "c",
-        "csignal": "cpp"
+        "csignal": "cpp",
+        "list": "cpp"
     }
 }

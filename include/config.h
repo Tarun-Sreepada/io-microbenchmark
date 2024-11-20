@@ -66,6 +66,8 @@ struct thread_stats
 
 uint64_t get_current_time_ns();
 
+
+
 unsigned long long get_device_size(int fd);
 std::string byte_conversion(unsigned long long bytes, const std::string &unit);
 void print_help(const char *program_name);
