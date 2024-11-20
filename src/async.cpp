@@ -329,6 +329,7 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
         }
 
         // Submit all queued requests to the kernel
+        // std::cout << "Submitting " << submitted << " requests\n";
         int ret = io_uring_submit(&ring);
         if (ret < 0)
         {
@@ -337,6 +338,7 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
 
         // Retrieve completions
         unsigned int count = io_uring_peek_batch_cqe(&ring, cqes, params.queue_depth);
+        // std::cout << "Received " << count << " completions\n";
 
         for (unsigned int i = 0; i < count; ++i)
         {
@@ -376,9 +378,10 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
         }
 
 
-
+        // std::cout << "Completed " << stats.io_completed << " operations\n";
         if (stats.io_completed >= loops)
         {
+            // std::cout << "Incrementing loops\n";
             loops += increment;
             uint64_t current_time = get_current_time_ns();
             double elapsed_time = (current_time - start_time);
