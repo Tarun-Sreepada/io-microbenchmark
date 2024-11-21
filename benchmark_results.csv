@@ -1,2 +1,0 @@
-rw,method,threads,queue_depth,run,iops,bandwidth
-read,rand,1,1,1,16763.7,68.6643

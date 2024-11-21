@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import numpy as np
 
-def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_runs, duration):
+def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_runs, duration, csv_file):
     """
     Runs the io_benchmark command with different parameters and collects the results.
 
@@ -20,8 +20,6 @@ def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_run
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     # remove the scripts folder from the path and add build folder
     executable_location = os.path.join(cur_dir[:-7], 'build', 'io_benchmark')
-
-    csv_file = 'benchmark_results.csv'
 
     # Initialize CSV file if it doesn't exist
     if not os.path.exists(csv_file):
@@ -54,6 +52,7 @@ def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_run
                             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=duration*2)
                             output = result.stdout + result.stderr  # Combine stdout and stderr
                             output = "\n".join(output.split("\n")[-8:])
+                            print(output)
                             iops, bandwidth = parse_output(output)
                             if iops is not None and bandwidth is not None:
                                 # Create a DataFrame with one row
@@ -256,7 +255,7 @@ def main():
     # Check if CSV file exists
     if not os.path.exists(csv_file):
         # Run benchmarks
-        run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_runs, duration)
+        run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_runs, duration, csv_file)
     else:
         print(f'{csv_file} exists. Skipping benchmark execution and plotting existing data.')
 
