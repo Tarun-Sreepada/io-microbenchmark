@@ -222,7 +222,7 @@ void io_benchmark_thread_async(benchmark_params &params, thread_stats &stats, ui
             // Buffer stats to avoid frequent terminal writes
             stats_buffer.str("");
             stats_buffer << "\rThread " << thread_id
-                            << ": IOPS = " << std::fixed << std::setprecision(2) << iops
+                            << ": IO/S = " << std::fixed << std::setprecision(2) << iops
                             << ", Throughput = " << throughput / 1e6 << " MB/s"
                             << ", Elapsed Time = " << std::fixed << std::setprecision(2)
                             << (elapsed_time) << "s";

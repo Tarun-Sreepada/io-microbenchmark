@@ -53,6 +53,7 @@ def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, num_run
                             print(f'Run {run_num+1}/{num_runs} - Running command:', ' '.join(cmd))
                             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=duration*2)
                             output = result.stdout + result.stderr  # Combine stdout and stderr
+                            output = "\n".join(output.split("\n")[-8:])
                             iops, bandwidth = parse_output(output)
                             if iops is not None and bandwidth is not None:
                                 # Create a DataFrame with one row
@@ -204,11 +205,35 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
             ax_bandwidth.grid(True)
             ax_bandwidth.legend()
 
-    # Adjust layout and save the combined images
-    # plt.tight_layout()
-    fig.savefig('combined_iops.png')
-    fig_bandwidth.savefig('combined_bandwidth.png')
+    # save in results folder
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    fig.savefig(os.path.join(cur_dir, 'results', 'combined_iops.png'))
+    fig_bandwidth.savefig(os.path.join(cur_dir, 'results', 'combined_bandwidth.png'))
 
+
+def test():
+
+    # run write seq with 2 threads and print the captured output
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    # remove the scripts folder from the path and add build folder
+    executable_location = os.path.join(cur_dir[:-7], 'build', 'io_benchmark')
+    cmd = [
+        executable_location,
+        '--location=/dev/nvme0n1',
+        '--async',
+        '--threads=1',
+        '--queue_depth=256',
+        '--method=seq',
+        '--type=read',
+        '--time',
+        '--duration=20',
+        '-y'
+    ]
+    print(f'Running command:', ' '.join(cmd))
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=20*2)
+    output = result.stdout + result.stderr  # Combine stdout and stderr
+    
+    print("\n".join(output.split("\n")[-8:]))
 
 
 def main():
@@ -223,7 +248,10 @@ def main():
     num_runs = 3  # Number of times to run each benchmark and average results
     duration = 20
 
-    csv_file = 'benchmark_results.csv'
+    # save the csv file in the same directory as the script but in results folder
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    csv_file = os.path.join(cur_dir, 'results', 'benchmark_results.csv')
+
 
     # Check if CSV file exists
     if not os.path.exists(csv_file):
@@ -234,6 +262,7 @@ def main():
 
     # Plot results
     plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts)
+
 
 
 if __name__ == '__main__':
