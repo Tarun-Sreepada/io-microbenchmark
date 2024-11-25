@@ -350,7 +350,7 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
 
     munmap(s->sqes, s->sqes_sz);
     close(s->ring_fd);
-    delete s;
+    // delete s;
 
 
 }
