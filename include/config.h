@@ -52,6 +52,8 @@ struct benchmark_params
     std::vector<uint64_t> offsets;
     uint64_t total_num_pages = 0;
     uint64_t data_size = 0;
+
+    std::ostringstream stats_buffer;
 };
 
 struct thread_stats
@@ -68,3 +70,5 @@ void print_help(const char *program_name);
 benchmark_params parse_arguments(int argc, char *argv[]);
 
 std::vector<uint64_t> generate_offsets(const benchmark_params &params, uint64_t thread_id);
+
+void print_status(const benchmark_params &params, const thread_stats &stats, uint64_t thread_id, uint64_t start_time, std::ostringstream &stats_buffer);

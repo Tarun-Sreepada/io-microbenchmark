@@ -5,12 +5,11 @@
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #include <sys/uio.h>
-#include <linux/io_uring.h>
+#include <liburing.h>
 
 /* Memory barriers */
 #define read_barrier() __asm__ __volatile__("" ::: "memory")
 #define write_barrier() __asm__ __volatile__("" ::: "memory")
-
 
 struct app_io_sq_ring
 {
@@ -53,29 +52,23 @@ struct io_data
 
 
 
-// Works in VSCode when highlighting a function by hovering over it :)
 /**
- * @brief Performs the io_uring_setup system call.
- *
- * @param entries Number of submission queue entries.
- * @param p Pointer to io_uring_params structure.
- * @return File descriptor on success, -1 on failure.
+ * @brief IO benchmark thread for io_uring engine.
+ * Executes number of IO operations specified in the benchmark parameters and measures the time taken.
+ * 
+ * @param params Benchmark parameters.
+ * @param stats Thread statistics.
+ * @param thread_id Thread ID.
  */
-int io_uring_setup(unsigned entries, struct io_uring_params *p);
-
-/**
- * @brief Performs the io_uring_enter system call.
- *
- * @param ring_fd File descriptor of the io_uring instance.
- * @param to_submit Number of submissions to submit.
- * @param min_complete Minimum number of completions.
- * @param flags Flags for the system call.
- * @return Number of events submitted on success, -1 on failure.
- */
-int io_uring_enter(int ring_fd, unsigned int to_submit,
-                   unsigned int min_complete, unsigned int flags);
-
-
 void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id);
 
+
+/**
+ * @brief Time-based benchmark thread for io_uring engine.
+ * Executes IO operations for a specified duration and measures the number of successful operations.
+ * 
+ * @param params Benchmark parameters.
+ * @param stats Thread statistics.
+ * @param thread_id Thread ID.
+ */
 void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id);

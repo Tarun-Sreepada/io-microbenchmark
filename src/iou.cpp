@@ -2,40 +2,6 @@
 #include "config.h"
 
 
-
-/**
- * @brief Performs the io_uring_setup system call.
- *
- * @param entries Number of submission queue entries.
- * @param p Pointer to io_uring_params structure.
- * @return File descriptor on success, -1 on failure.
- */
-int io_uring_setup(unsigned entries, struct io_uring_params *p)
-{
-    return (int)syscall(__NR_io_uring_setup, entries, p);
-}
-
-/**
- * @brief Performs the io_uring_enter system call.
- *
- * @param ring_fd File descriptor of the io_uring instance.
- * @param to_submit Number of submissions to submit.
- * @param min_complete Minimum number of completions.
- * @param flags Flags for the system call.
- * @return Number of events submitted on success, -1 on failure.
- */
-int io_uring_enter(int ring_fd, unsigned int to_submit,
-                   unsigned int min_complete, unsigned int flags)
-{
-    return (int)syscall(__NR_io_uring_enter, ring_fd, to_submit, min_complete,
-                        flags, NULL, 0);
-}
-
-/**
- * @brief Cleans up the submitter structure.
- *
- * @param s Pointer to the submitter structure.
- */
 void cleanup_submitter(submitter *s)
 {
     if (s->sq_ptr)
@@ -206,7 +172,6 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
 }
 
 
-
 void reap_cqes(submitter *s, uint64_t &completed_ios) {
     struct app_io_cq_ring *cring = &s->cq_ring;
     unsigned head;
@@ -311,7 +276,7 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
             to_submit++;
         }
 
-        int ret = io_uring_enter(s->ring_fd, to_submit, 0, 0);
+        int ret = io_uring_enter(s->ring_fd, to_submit, 0, IORING_ENTER_GETEVENTS, NULL);
         if (ret < 0)
         {
             perror("io_uring_enter");
@@ -325,7 +290,7 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
 
     while (stats.io_completed < params.io)
     {
-        int ret = io_uring_enter(s->ring_fd, 0, params.queue_depth, 0);
+        int ret = io_uring_enter(s->ring_fd, 0, params.queue_depth, 0, NULL);
         if (ret < 0)
         {
             perror("io_uring_enter");
@@ -368,10 +333,12 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
     while (true)
     {
         uint64_t now = get_current_time_ns();
-        if (now - start_time > 1e9 * params.duration)
+        uint64_t duration = now - start_time;
+        if (duration > params.duration * 1e9)
         {
             break;
         }
+
 
         while (submitted_ios - stats.io_completed < params.queue_depth)
         {
@@ -380,7 +347,9 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
             to_submit++;
         }
 
-        int ret = io_uring_enter(s->ring_fd, to_submit, 1, 0);
+        int ret = io_uring_enter(s->ring_fd, to_submit, 0, IORING_ENTER_GETEVENTS, NULL);
+        std::cout << "ret: " << ret << std::endl;
+
         if (ret < 0)
         {
             perror("io_uring_enter");

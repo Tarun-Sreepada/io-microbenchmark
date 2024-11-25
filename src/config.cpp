@@ -225,3 +225,24 @@ std::vector<uint64_t> generate_offsets(const benchmark_params &params, uint64_t 
 
     return offsets;
 }
+
+
+void print_status(const benchmark_params &params, const thread_stats &stats, uint64_t thread_id, uint64_t start_time, std::ostringstream &stats_buffer)
+{
+    uint64_t current_time = get_current_time_ns();
+    double elapsed_time = (current_time - start_time);
+
+    elapsed_time /= 1e9;
+
+    double iops = stats.io_completed / elapsed_time;
+    double throughput = (stats.io_completed * params.page_size) / elapsed_time;
+
+    // Buffer stats to avoid frequent terminal writes
+    stats_buffer.str("");
+    stats_buffer << "\rThread " << thread_id
+                    << ": IO/S = " << std::fixed << std::setprecision(2) << iops
+                    << ", Throughput = " << throughput / 1e6 << " MB/s"
+                    << ", Elapsed Time = " << std::fixed << std::setprecision(2)
+                    << (elapsed_time) << "s";
+    std::cout << stats_buffer.str() << std::flush;
+}

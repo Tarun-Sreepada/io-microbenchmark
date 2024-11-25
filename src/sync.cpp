@@ -50,7 +50,6 @@ void io_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uin
 
     double submission_time = 0;
     double completion_time = 0;
-    stats.latencies.resize(params.io, 0);
     int max_retries = 5; // Maximum number of retries
 
 
@@ -168,8 +167,6 @@ void time_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, u
     // Adjust the number of operations based on measured performance
     params.io = loops * params.duration * 2;       // Double it to accommodate fluctuations
     offsets = generate_offsets(params, thread_id); // Regenerate offsets
-
-    stats.latencies.resize(params.io, 0); // Initialize latencies vector
 
     std::ostringstream stats_buffer; // Buffer to accumulate stats output
 
