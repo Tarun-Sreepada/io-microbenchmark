@@ -1,6 +1,5 @@
-#include "sync.h"
+#include "async.h"
 #include "config.h"
-#include <liburing.h>
 
 void async_refresh_interval_acquire(benchmark_params &params, char *buffer, std::vector<uint64_t> &offsets, uint64_t &loops, bool &loop, uint64_t start_time, uint64_t granularity)
 {
@@ -413,11 +412,31 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
     stats.total_time = (end_time - start_time) / 1e9;
     std::cout << "\r" << std::string(stats_buffer.str().length(), ' ') << "\r" << std::flush;
 
-    // mark all cqe as seen
-    for (unsigned int i = 0; i < params.queue_depth; i++)
+    while (stats.io_completed < submitted)
     {
-        io_uring_cqe_seen(&ring, cqes[i]);
+        // Wait for completions
+        struct io_uring_cqe *cqe;
+        int ret = io_uring_wait_cqe(&ring, &cqe);
+        if (ret < 0)
+        {
+            throw std::runtime_error("io_uring_wait_cqe failed: " + std::string(strerror(-ret)));
+        }
+
+        if (cqe->res != params.page_size)
+        {
+            // Handle I/O error if necessary
+            std::cerr << "I/O error: cqe->res = " << cqe->res << std::endl;
+        }
+        else
+        {
+            // Successful completion
+            stats.io_completed++;
+        }
+
+        // Mark the CQE as seen
+        io_uring_cqe_seen(&ring, cqe);
     }
+
 
     // Free resources
     io_uring_queue_exit(&ring);
@@ -428,4 +447,7 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
     }
 
     free(buffers);
+
+
+
 }

@@ -64,6 +64,7 @@
         "variant": "cpp",
         "config.h": "c",
         "csignal": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "io_uring.h": "c"
     }
 }

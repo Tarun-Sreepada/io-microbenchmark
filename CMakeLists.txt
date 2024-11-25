@@ -16,6 +16,10 @@ find_package(PkgConfig REQUIRED)
 # Check for liburing
 pkg_check_modules(LIBURING REQUIRED liburing)
 
+# Debugging paths
+message(STATUS "liburing include directories: ${LIBURING_INCLUDE_DIRS}")
+message(STATUS "liburing libraries: ${LIBURING_LIBRARIES}")
+
 # Include directories
 include_directories(include ${LIBURING_INCLUDE_DIRS})
 
@@ -25,6 +29,7 @@ add_executable(io_benchmark
     src/sync.cpp
     src/async.cpp
     src/config.cpp
+    src/iou.cpp
 )
 
 # Link libraries to the main executable
@@ -34,5 +39,3 @@ target_link_libraries(io_benchmark PRIVATE ${LIBURING_LIBRARIES} pthread)
 message(STATUS "Project: ${PROJECT_NAME}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Optimization Level: ${CMAKE_CXX_FLAGS}")
-message(STATUS "liburing Include Dirs: ${LIBURING_INCLUDE_DIRS}")
-message(STATUS "liburing Libraries: ${LIBURING_LIBRARIES}")

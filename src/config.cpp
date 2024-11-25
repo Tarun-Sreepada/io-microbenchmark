@@ -22,6 +22,7 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
     struct option long_options[] = {
         {"location", required_argument, nullptr, 'l'},
         {"page_size", required_argument, nullptr, 'p'},
+        {"engine", required_argument, nullptr, 'e'},
         {"method", required_argument, nullptr, 'm'},
         {"type", required_argument, nullptr, 't'},
         {"io", required_argument, nullptr, 'i'},
@@ -38,7 +39,7 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
 
     int opt;
     bool sync_flag_set, async_flag_set;
-    while ((opt = getopt_long(argc, argv, "l:p:m:t:i:T:d:n:q:sayh", long_options, nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "l:p:m:t:i:T:d:n:q:e:yh", long_options, nullptr)) != -1) {
         switch (opt) {
             case 'l': params.location = optarg; break;
             case 'p': params.page_size = std::stoi(optarg); break;
@@ -49,12 +50,7 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
             case 'd': params.duration = std::stoull(optarg); break; // Set duration
             case 'n': params.threads = std::stoull(optarg); break;
             case 'q': params.queue_depth = std::stoull(optarg); break;
-            case 's': 
-                params.use_sync = true; 
-                break;
-            case 'a': 
-                params.use_sync = false; 
-                break;
+            case 'e': params.engine = optarg; break;
             case 'y': params.skip_confirmation = true; break;
             case 'h': print_help(argv[0]); exit(0);
             default: 
@@ -115,7 +111,7 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
     }
 
     // If sync and queue depth is greater than 1, set queue depth to 1 and print warning
-    if (params.use_sync && params.queue_depth > 1) {
+    if (params.engine=="sync" && params.queue_depth > 1) {
         std::cout << "Warning: Queue depth is capped at 1 for synchronous I/O.\n";
         params.queue_depth = 1;
     }
@@ -158,7 +154,8 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
 
     std::cout << "\tThreads: " << params.threads
             << "\tQueue Depth: " << params.queue_depth
-            << "\tI/O Mode: " << (params.use_sync ? "Synchronous" : "Asynchronous") 
+            // << "\tI/O Mode: " << (params.use_sync ? "Synchronous" : "Asynchronous") 
+            << "\tEngine: " << params.engine
             << std::endl;
 
 
@@ -168,19 +165,18 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
 void print_help(const char *program_name) {
     std::cout << "Usage: " << program_name << " [OPTIONS]\n";
     std::cout << "Options:\n"
-              << "  --help                      Display this help message\n"
-              << "  --location=<location>       Device location (required, e.g., /dev/sda)\n"
-              << "  --page_size=<size>          Page size (default: 4096)\n"
-              << "  --method=<seq|rand>         Access method (default: seq)\n"
-              << "  --type=<read|write>         Operation type (default: read)\n"
-              << "  --io=<value>                Number of IO requests (default: 10000)\n"
-              << "  --threads=<threads>         Number of threads (default: 1)\n"
-              << "  --queue_depth=<depth>       Queue depth (default: 1)\n"
-              << "  --sync                      Use synchronous I/O\n"
-              << "  --async                     Use asynchronous I/O\n"
-              << "  -y                          Skip confirmation\n"
-              << "  --time                      Enable time-based benchmarking\n"
-              << "  --duration=<seconds>        Duration in seconds for time-based benchmarking\n";
+              << "  --help                             Display this help message\n"
+              << "  --location=<location>              Device location (required, e.g., /dev/sda)\n"
+              << "  --page_size=<size>                 Page size (default: 4096)\n"
+              << "  --method=<seq|rand>                Access method (default: seq)\n"
+              << "  --type=<read|write>                Operation type (default: read)\n"
+              << "  --io=<value>                       Number of IO requests (default: 10000)\n"
+              << "  --threads=<threads>                Number of threads (default: 1)\n"
+              << "  --queue_depth=<depth>              Queue depth (default: 1)\n"
+              << "  --engine=<sync|liburing|io_uring>  I/O engine to use (default: sync)\n"
+              << "  -y                                 Skip confirmation for write operation because of data loss\n"
+              << "  --time                             Enable time-based benchmarking\n"
+              << "  --duration=<seconds>               Duration in seconds for time-based benchmarking\n";
 
               
 }

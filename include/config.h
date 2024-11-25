@@ -18,17 +18,15 @@
 #include <string>
 #include <mutex>
 #include <cerrno>
-#include <linux/fs.h>
 #include <sys/ioctl.h>
-#include <sys/uio.h> // Include for iovec
+#include <linux/fs.h>
+
 #include <algorithm>
 #include <numeric>
-#include <iostream>
-#include <thread>
-#include <atomic>
-#include <chrono>
-#include <ctime>
 #include <csignal>
+
+#include <sstream>
+
 
 #define KIBI 1024LL
 #define KILO 1000LL
@@ -47,8 +45,7 @@ struct benchmark_params
     uint64_t threads = 1;
     uint64_t queue_depth = 1;
     uint64_t refresh_interval = 1e8; // 100ms
-
-    bool use_sync = false;
+    std::string engine = "sync";
 
     int fd = -1;
     char *buf = nullptr;
