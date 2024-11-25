@@ -221,12 +221,11 @@ void io_benchmark_thread_async(benchmark_params &params, thread_stats &stats, ui
             // Buffer stats to avoid frequent terminal writes
             stats_buffer.str("");
             stats_buffer << "\rThread " << thread_id
-                            << ": IO/S = " << std::fixed << std::setprecision(2) << iops
-                            << ", Throughput = " << throughput / 1e6 << " MB/s"
-                            << ", Elapsed Time = " << std::fixed << std::setprecision(2)
-                            << (elapsed_time) << "s";
+                         << ": IO/S = " << std::fixed << std::setprecision(2) << iops
+                         << ", Throughput = " << throughput / 1e6 << " MB/s"
+                         << ", Elapsed Time = " << std::fixed << std::setprecision(2)
+                         << (elapsed_time) << "s";
             std::cout << stats_buffer.str() << std::flush;
-
         }
     }
 
@@ -249,7 +248,6 @@ void io_benchmark_thread_async(benchmark_params &params, thread_stats &stats, ui
     }
 
     free(buffers);
-
 }
 
 void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
@@ -376,7 +374,6 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
             io_uring_cqe_seen(&ring, cqe);
         }
 
-
         // std::cout << "Completed " << stats.io_completed << " operations\n";
         if (stats.io_completed >= loops)
         {
@@ -399,12 +396,11 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
             // Buffer stats to avoid frequent terminal writes
             stats_buffer.str("");
             stats_buffer << "\rThread " << thread_id
-                            << ": IOPS = " << std::fixed << std::setprecision(2) << iops
-                            << ", Throughput = " << throughput / 1e6 << " MB/s"
-                            << ", Remaining Time = " << std::fixed << std::setprecision(2)
-                            << (params.duration - elapsed_time) << "s";
+                         << ": IOPS = " << std::fixed << std::setprecision(2) << iops
+                         << ", Throughput = " << throughput / 1e6 << " MB/s"
+                         << ", Remaining Time = " << std::fixed << std::setprecision(2)
+                         << (params.duration - elapsed_time) << "s";
             std::cout << stats_buffer.str() << std::flush;
-
         }
     }
 
@@ -437,7 +433,6 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
         io_uring_cqe_seen(&ring, cqe);
     }
 
-
     // Free resources
     io_uring_queue_exit(&ring);
 
@@ -447,7 +442,4 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
     }
 
     free(buffers);
-
-
-
 }

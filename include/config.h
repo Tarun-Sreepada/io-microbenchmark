@@ -58,12 +58,9 @@ struct thread_stats
 {
     uint64_t io_completed;
     double total_time;
-    std::vector<uint64_t> latencies;
 };
 
 uint64_t get_current_time_ns();
-
-
 
 unsigned long long get_device_size(int fd);
 std::string byte_conversion(unsigned long long bytes, const std::string &unit);

@@ -31,7 +31,37 @@ int io_uring_enter(int ring_fd, unsigned int to_submit,
                         flags, NULL, 0);
 }
 
+/**
+ * @brief Cleans up the submitter structure.
+ *
+ * @param s Pointer to the submitter structure.
+ */
+void cleanup_submitter(submitter *s)
+{
+    if (s->sq_ptr)
+    {
+        munmap(s->sq_ptr, s->sring_sz);
+        s->sq_ptr = nullptr;
+    }
 
+    if (s->cq_ptr && s->cq_ptr != s->sq_ptr)
+    {
+        munmap(s->cq_ptr, s->cring_sz);
+        s->cq_ptr = nullptr;
+    }
+
+    if (s->sqes)
+    {
+        munmap(s->sqes, s->sqes_sz);
+        s->sqes = nullptr;
+    }
+
+    if (s->ring_fd >= 0)
+    {
+        close(s->ring_fd);
+        s->ring_fd = -1;
+    }
+}
 
 /**
  * @brief Sets up the io_uring instance and maps the rings.
@@ -138,8 +168,7 @@ int app_setup_uring(struct submitter *s, unsigned queue_depth)
  * @param is_read True for read, false for write.
  * @param io Pointer to the io_data structure.
  */
-void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, bool is_read, struct io_data *io)
-{
+void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, bool is_read, struct io_data *io) {
     struct app_io_sq_ring *sring = &s->sq_ring;
     unsigned tail, index;
 
@@ -151,10 +180,10 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
 
     io->length = block_size;
     io->offset = offset;
-    if (posix_memalign(&io->buf, 4096, block_size))
-    { // Align to 4096 bytes
+
+    if (posix_memalign(&io->buf, 4096, block_size)) { // Align to 4096 bytes
         perror("posix_memalign");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     sqe->fd = fd;
@@ -163,14 +192,11 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
     sqe->off = offset;
     sqe->user_data = (unsigned long long)io;
 
-    if (is_read)
-    {
+    if (is_read) {
         sqe->opcode = IORING_OP_READ;
-    }
-    else
-    {
+    } else {
         sqe->opcode = IORING_OP_WRITE;
-        memset(io->buf, 0xAA, block_size); // Fill buffer with dummy data
+        // memset(io->buf, 0xAA, block_size); // Fill buffer with dummy data // Commented out to avoid unnecessary memset overhead?W
     }
 
     sring->array[index] = index;
@@ -179,51 +205,81 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
     write_barrier();
 }
 
-/**
- * @brief Reaps completed I/O operations from the completion queue.
- *
- * @param s Pointer to the submitter structure.
- * @param completed_ios Atomic counter for completed I/Os.
- * @param total_bytes Atomic counter for total bytes transferred.
- */
-void reap_cqes(submitter *s, uint64_t &completed_ios)
-{
+
+
+void reap_cqes(submitter *s, uint64_t &completed_ios) {
     struct app_io_cq_ring *cring = &s->cq_ring;
     unsigned head;
 
     head = *cring->head;
 
-    while (head != *cring->tail)
-    {
+    while (head != *cring->tail) {
         read_barrier();
         struct io_uring_cqe *cqe = &cring->cqes[head & *cring->ring_mask];
         struct io_data *io = (struct io_data *)cqe->user_data;
 
-        if (cqe->res < 0)
-        {
-            std::cerr << "I/O error: " << strerror(-cqe->res) << std::endl;
-        }
-        else if ((size_t)cqe->res != io->length)
-        {
-            std::cerr << "Partial I/O: " << cqe->res << " bytes" << std::endl;
-        }
+        if (cqe->res < 0) {
+            // Log the error and resubmit
+            // std::cerr << "I/O error: " << strerror(-cqe->res) << ". Resubmitting...\n";
 
-        free(io->buf);
-        delete io;
+            // Reuse the io_data and resubmit the I/O
+            struct app_io_sq_ring *sring = &s->sq_ring;
+            unsigned tail = *sring->tail;
+            unsigned index = tail & *sring->ring_mask;
+
+            struct io_uring_sqe *sqe = &s->sqes[index];
+            memset(sqe, 0, sizeof(*sqe));
+
+            // sqe->fd = io->fd;
+            sqe->addr = (unsigned long)io->buf;
+            sqe->len = io->length;
+            sqe->off = io->offset;
+            sqe->user_data = (unsigned long long)io;
+
+            sqe->opcode = cqe->res == -EINVAL ? IORING_OP_WRITE : IORING_OP_READ; // Retry as appropriate
+
+            sring->array[index] = index;
+            tail++;
+            *sring->tail = tail;
+            write_barrier();
+        } else if ((size_t)cqe->res != io->length) {
+            // std::cerr << "Partial I/O: " << cqe->res << " bytes. Resubmitting...\n";
+
+            // Handle partial I/O similarly
+            struct app_io_sq_ring *sring = &s->sq_ring;
+            unsigned tail = *sring->tail;
+            unsigned index = tail & *sring->ring_mask;
+
+            struct io_uring_sqe *sqe = &s->sqes[index];
+            memset(sqe, 0, sizeof(*sqe));
+
+            // Resubmit only the remaining part
+            size_t remaining = io->length - cqe->res;
+            // sqe->fd = io->fd;
+            sqe->addr = (unsigned long)((char *)io->buf + cqe->res);
+            sqe->len = remaining;
+            sqe->off = io->offset + cqe->res;
+            sqe->user_data = (unsigned long long)io;
+
+            sqe->opcode = IORING_OP_READ;
+
+            sring->array[index] = index;
+            tail++;
+            *sring->tail = tail;
+            write_barrier();
+        } else {
+            // Successful I/O
+            completed_ios++;
+            free(io->buf);
+            delete io;
+        }
 
         head++;
-        completed_ios++;
     }
 
     *cring->head = head;
     write_barrier();
 }
-
-
-
-
-
-
 
 void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
@@ -233,6 +289,8 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
     if (app_setup_uring(s, params.queue_depth))
     {
         std::cerr << "Failed to set up io_uring\n";
+        cleanup_submitter(s); // Cleanup resources before exit
+        delete s;
         exit(EXIT_FAILURE);
     }
 
@@ -246,16 +304,19 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
 
     for (uint64_t i = 0; i < params.io; ++i)
     {
-        while(submitted_ios - stats.io_completed >= params.queue_depth)
+        while (submitted_ios - stats.io_completed >= params.queue_depth)
         {
             submit_io(s, params.fd, params.page_size, offsets[i], params.read_or_write == "read", new io_data());
             submitted_ios++;
             to_submit++;
         }
+
         int ret = io_uring_enter(s->ring_fd, to_submit, 0, 0);
         if (ret < 0)
         {
             perror("io_uring_enter");
+            cleanup_submitter(s); // Cleanup resources before exit
+            delete s;
             exit(EXIT_FAILURE);
         }
         to_submit = 0;
@@ -268,6 +329,8 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
         if (ret < 0)
         {
             perror("io_uring_enter");
+            cleanup_submitter(s); // Cleanup resources before exit
+            delete s;
             exit(EXIT_FAILURE);
         }
         reap_cqes(s, stats.io_completed);
@@ -276,18 +339,11 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
     uint64_t end_time = get_current_time_ns();
     stats.total_time = (end_time - start_time) / 1e9;
 
-    delete s;
-
-    munmap(s->sq_ptr, s->sring_sz);
-    if (s->cq_ptr && s->cq_ptr != s->sq_ptr)
-    {
-        munmap(s->cq_ptr, s->cring_sz);
-    }
-    munmap(s->sqes, s->sqes_sz);
-    close(s->ring_fd);
-    delete s;
-
+    cleanup_submitter(s); // Cleanup resources
+    delete s;              // Free the submitter structure
 }
+
+
 
 void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
@@ -297,8 +353,8 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
     if (app_setup_uring(s, params.queue_depth))
     {
         std::cerr << "Failed to set up io_uring\n";
+        delete s;  // Free before exit
         exit(EXIT_FAILURE);
-        delete s;
     }
 
     params.device_size = get_device_size(params.fd);
@@ -309,7 +365,6 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
 
     uint64_t start_time = get_current_time_ns();
 
-
     while (true)
     {
         uint64_t now = get_current_time_ns();
@@ -318,21 +373,22 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
             break;
         }
 
-        while(submitted_ios - stats.io_completed < params.queue_depth)
+        while (submitted_ios - stats.io_completed < params.queue_depth)
         {
             submit_io(s, params.fd, params.page_size, offsets[submitted_ios], params.read_or_write == "read", new io_data());
             submitted_ios++;
             to_submit++;
         }
+
         int ret = io_uring_enter(s->ring_fd, to_submit, 1, 0);
         if (ret < 0)
         {
             perror("io_uring_enter");
+            cleanup_submitter(s); // Use a cleanup function for consistent resource management
             exit(EXIT_FAILURE);
         }
         to_submit = 0;
         reap_cqes(s, stats.io_completed);
-
     }
 
     uint64_t end_time = get_current_time_ns();
@@ -340,17 +396,6 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
 
     reap_cqes(s, stats.io_completed);
 
-    delete s;
-
-    munmap(s->sq_ptr, s->sring_sz);
-    if (s->cq_ptr && s->cq_ptr != s->sq_ptr)
-    {
-        munmap(s->cq_ptr, s->cring_sz);
-    }
-
-    munmap(s->sqes, s->sqes_sz);
-    close(s->ring_fd);
-    // delete s;
-
-
+    cleanup_submitter(s); // Cleanup resources
+    delete s; // Delete submitter after cleanup
 }
