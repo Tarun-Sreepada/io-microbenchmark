@@ -150,6 +150,59 @@ void reap_cqes(submitter *s, uint64_t &completed_ios)
 void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
 
+       params.io = params.duration * 1e6; // estimate number of I/O operations
+    std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
+
+    struct submitter *s = new submitter();
+
+    if (app_setup_uring(s, params.queue_depth))
+    {
+        throw std::runtime_error("Error setting up io_uring");
+    }
+
+    uint64_t submitted, to_submit = 0;
+    submitted = 0;
+
+    stats.start_time = get_current_time_ns();
+
+    while(true)
+    {
+        if (stats.io_completed >= params.io)
+        {
+            break;
+        }
+
+        while ((submitted - stats.io_completed) < params.queue_depth)
+        {
+            struct io_data *io = new io_data();
+            submit_io(s, params.fd, params.page_size, offsets[submitted % params.io], params.read_or_write == "read", io);
+            submitted++;
+            to_submit++;
+        }
+
+        int ret = io_uring_enter(s->ring_fd, to_submit, 1, IORING_ENTER_GETEVENTS, NULL);
+        if (ret < 0)
+        {
+            throw std::runtime_error("io_uring_enter failed: " + std::string(strerror(-ret)));
+        }
+        to_submit = 0;
+
+        reap_cqes(s, stats.io_completed);
+    }
+
+    stats.end_time = get_current_time_ns();
+
+    munmap(s->sq_ptr, s->sring_sz);
+    if (s->cq_ptr && s->cq_ptr != s->sq_ptr)
+    {
+        munmap(s->cq_ptr, s->cring_sz);
+    }
+    munmap(s->sqes, s->sqes_sz);
+    close(s->ring_fd);
+
+    delete s;
+
+
 }
 
 void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
