@@ -59,7 +59,10 @@ struct benchmark_params
 struct thread_stats
 {
     uint64_t io_completed;
-    double total_time;
+    uint64_t start_time;
+    uint64_t end_time;
+
+    std::vector<uint64_t> latencies;
 };
 
 uint64_t get_current_time_ns();
@@ -70,5 +73,3 @@ void print_help(const char *program_name);
 benchmark_params parse_arguments(int argc, char *argv[]);
 
 std::vector<uint64_t> generate_offsets(const benchmark_params &params, uint64_t thread_id);
-
-void print_status(const benchmark_params &params, const thread_stats &stats, uint64_t thread_id, uint64_t start_time, std::ostringstream &stats_buffer);
