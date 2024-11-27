@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import numpy as np
-from matplotlib.ticker import LogLocator
+from brokenaxes import brokenaxes
 
 def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, engines, num_runs, duration, csv_file):
     """
@@ -200,7 +200,11 @@ def main():
     thread_counts = [1]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 10
+    duration = 5
+
+    # if results folder does not exist where the script is located, create it
+    if not os.path.exists(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results')):
+        os.makedirs(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results'))
 
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     csv_file = os.path.join(cur_dir, 'results', 'benchmark_results.csv')
