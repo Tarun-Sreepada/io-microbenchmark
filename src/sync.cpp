@@ -79,14 +79,14 @@ void time_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, u
         {
             while (ret < params.page_size)
             {
-                ret += pwrite(params.fd, buffer + ret, params.page_size - ret, offsets[0] + ret);
+                ret += pwrite(params.fd, buffer + ret, params.page_size - ret, offsets[stats.io_completed % params.io] + ret);
             }
         }
         else
         {
             while (ret < params.page_size)
             {
-                ret += pread(params.fd, buffer + ret, params.page_size - ret, offsets[0] + ret);
+                ret += pread(params.fd, buffer + ret, params.page_size - ret, offsets[stats.io_completed % params.io] + ret);
             }
         }
 

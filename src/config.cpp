@@ -204,7 +204,7 @@ std::vector<uint64_t> generate_offsets(const benchmark_params &params, uint64_t 
 
     if (params.seq_or_rand == "seq") {
         for (uint64_t i = 0; i < params.io; ++i) {
-            offsets[i] = ((i * params.page_size) + thread_id * params.page_size) % params.device_size + avoid;
+            offsets[i] = ((i * params.page_size) + thread_id * params.io) % params.device_size;
         }
     } else if (params.seq_or_rand == "rand") {
         std::mt19937_64 rng(std::random_device{}() + thread_id);
