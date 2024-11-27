@@ -98,14 +98,22 @@ def parse_output(output):
         iops (float or None): The IOPS value extracted from the output.
         bandwidth (float or None): The bandwidth value extracted from the output.
     """
-    iops_match = re.search(r'Throughput:\s*([\d\.]+)\s*IOPS', output)
-    bandwidth_match = re.search(r'Bandwidth:\s*([\d\.]+)\s*MB/s', output)
-    if iops_match and bandwidth_match:
+    # Updated regex to support scientific notation
+    iops_match = re.search(r'Throughput:\s*([\d\.eE+-]+)\s*IOPS', output)
+    bandwidth_match = re.search(r'Bandwidth:\s*([\d\.eE+-]+)\s*MB/s', output)
+    
+    if iops_match:
         iops = float(iops_match.group(1))
-        bandwidth = float(bandwidth_match.group(1))
-        return iops, bandwidth
     else:
-        return None, None
+        iops = None
+    
+    if bandwidth_match:
+        bandwidth = float(bandwidth_match.group(1))
+    else:
+        bandwidth = None
+    
+    return iops, bandwidth
+
 
 def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines):
     df = pd.read_csv(csv_file)
@@ -183,13 +191,13 @@ def test():
 
 
 def main():
-    queue_depths = [1, 2, 4, 16]
+    queue_depths = [1, 2, 4, 16, 128, 256, 512]
     rw_types = ['read', 'write']
     access_methods = ['rand', 'seq']
-    thread_counts = [1, 2, 4]
+    thread_counts = [1, 2, 4, 8]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 10
+    duration = 6
 
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     csv_file = os.path.join(cur_dir, 'results', 'benchmark_results.csv')
