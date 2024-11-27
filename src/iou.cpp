@@ -28,7 +28,7 @@ void reap_cqes_async(submitter *s, uint64_t &completed_ios) {
             cv.notify_one();
 
             head++;
-            completed_ios++;
+            // completed_ios++;
         }
 
         *cring->head = head;
@@ -39,7 +39,7 @@ void reap_cqes_async(submitter *s, uint64_t &completed_ios) {
     }
 }
 
-void process_cqes(size_t page_size) {
+void process_cqes(size_t page_size, uint64_t &completed_ios) {
     while (!stop_reaping) {
         struct io_uring_cqe *cqe = nullptr;
 
@@ -58,16 +58,8 @@ void process_cqes(size_t page_size) {
         if (cqe) {
             struct io_data *io = (struct io_data *)cqe->user_data;
 
-            if (cqe->res < 0) {
-                std::cerr << "I/O error: " << strerror(-cqe->res) << std::endl;
-            } else if ((size_t)cqe->res != io->length) {
-                std::cerr << "Partial I/O: " << cqe->res << " bytes" << std::endl;
-            }
-
-            if ((size_t)cqe->res != page_size) {
-                std::cerr << "Error: Completed I/O size (" << cqe->res
-                          << " bytes) does not match page size (" << page_size
-                          << " bytes)" << std::endl;
+            if ((size_t)cqe->res == page_size) {
+                completed_ios++;
             }
 
             free(io->buf);
@@ -298,7 +290,7 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
     stats.start_time = get_current_time_ns();
 
     std::thread reaper_thread(reap_cqes_async, s, std::ref(stats.io_completed));
-    std::thread processing_thread(process_cqes, params.page_size);
+    std::thread processing_thread(process_cqes, params.page_size, std::ref(stats.io_completed));
 
     while(true)
     {
