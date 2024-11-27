@@ -1,7 +1,74 @@
 #include "iou.h"
 #include "config.h"
+#include <condition_variable>
+
+std::queue<struct io_uring_cqe *> cqe_queue;
+std::mutex queue_mutex;
+std::condition_variable cv;
+std::atomic<bool> stop_reaping(false);
 
 
+void reap_cqes_async(submitter *s, uint64_t &completed_ios) {
+    struct app_io_cq_ring *cring = &s->cq_ring;
+    unsigned head;
+
+    while (!stop_reaping) {
+        head = *cring->head;
+        unsigned tail = *cring->tail;
+
+        while (head != tail) {
+            read_barrier();
+            struct io_uring_cqe *cqe = &cring->cqes[head & *cring->ring_mask];
+
+            {
+                // Push CQE to the queue for async processing
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                cqe_queue.push(cqe);
+            }
+            cv.notify_one();
+
+            head++;
+            completed_ios++;
+        }
+
+        *cring->head = head;
+        write_barrier();
+
+        // Avoid busy waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void process_cqes() {
+    while (!stop_reaping) {
+        struct io_uring_cqe *cqe = nullptr;
+
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            cv.wait(lock, [] { return !cqe_queue.empty() || stop_reaping; });
+
+            if (stop_reaping && cqe_queue.empty()) {
+                break;
+            }
+
+            cqe = cqe_queue.front();
+            cqe_queue.pop();
+        }
+
+        if (cqe) {
+            struct io_data *io = (struct io_data *)cqe->user_data;
+
+            if (cqe->res < 0) {
+                std::cerr << "I/O error: " << strerror(-cqe->res) << std::endl;
+            } else if ((size_t)cqe->res != io->length) {
+                std::cerr << "Partial I/O: " << cqe->res << " bytes" << std::endl;
+            }
+
+            free(io->buf);
+            delete io;
+        }
+    }
+}
 
 int app_setup_uring(struct submitter *s, int queue_depth)
 {
@@ -114,12 +181,14 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
     write_barrier();
 }
 
-void reap_cqes(submitter *s, uint64_t &completed_ios)
+void reap_cqes(submitter *s, uint64_t ret, uint64_t &completed_ios)
 {
     struct app_io_cq_ring *cring = &s->cq_ring;
     unsigned head;
 
     head = *cring->head;
+
+
 
     while (head != *cring->tail)
     {
@@ -150,7 +219,7 @@ void reap_cqes(submitter *s, uint64_t &completed_ios)
 void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
 
-       params.io = params.duration * 1e6; // estimate number of I/O operations
+    params.io = params.duration * 1e6; // estimate number of I/O operations
     std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
 
     struct submitter *s = new submitter();
@@ -187,7 +256,7 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
         }
         to_submit = 0;
 
-        reap_cqes(s, stats.io_completed);
+        reap_cqes(s, ret, stats.io_completed);
     }
 
     stats.end_time = get_current_time_ns();
@@ -201,7 +270,6 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
     close(s->ring_fd);
 
     delete s;
-
 
 }
 
@@ -223,6 +291,9 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
 
     stats.start_time = get_current_time_ns();
 
+    std::thread reaper_thread(reap_cqes_async, s, std::ref(stats.io_completed));
+    std::thread processing_thread(process_cqes);
+
     while(true)
     {
         uint64_t current_time = get_current_time_ns();
@@ -239,17 +310,22 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
             to_submit++;
         }
 
-        int ret = io_uring_enter(s->ring_fd, to_submit, 1, IORING_ENTER_GETEVENTS, NULL);
+        int ret = io_uring_enter(s->ring_fd, to_submit, 0, IORING_ENTER_GETEVENTS, NULL);
         if (ret < 0)
         {
             throw std::runtime_error("io_uring_enter failed: " + std::string(strerror(-ret)));
         }
         to_submit = 0;
 
-        reap_cqes(s, stats.io_completed);
+        // reap_cqes(s, ret, stats.io_completed);
     }
 
     stats.end_time = get_current_time_ns();
+
+    stop_reaping = true;
+    cv.notify_all();
+    reaper_thread.join();
+    processing_thread.join();
 
     munmap(s->sq_ptr, s->sring_sz);
     if (s->cq_ptr && s->cq_ptr != s->sq_ptr)

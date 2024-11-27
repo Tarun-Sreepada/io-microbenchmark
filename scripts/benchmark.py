@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import numpy as np
-
+from matplotlib.ticker import LogLocator
 
 def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, engines, num_runs, duration, csv_file):
     """
@@ -147,16 +147,19 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
                     ax.plot(qd_list, iops_list, linestyle='-', marker='o', label=engine)
                     ax_bandwidth.plot(qd_list, bandwidth_list, linestyle='-', marker='o', label=engine)
 
+
+
                 ax.set_title(f'IOPS - {rw.capitalize()} {method.capitalize()}')
                 ax.set_xlabel('Queue Depth')
                 ax.set_ylabel('IOPS')
                 ax.set_xscale('log', base=2)
                 ax.legend()
 
+
+                ax_bandwidth.set_xscale('log', base=2)
                 ax_bandwidth.set_title(f'Bandwidth - {rw.capitalize()} {method.capitalize()}')
                 ax_bandwidth.set_xlabel('Queue Depth')
                 ax_bandwidth.set_ylabel('Bandwidth (MB/s)')
-                ax_bandwidth.set_xscale('log', base=2)
                 ax_bandwidth.legend()
 
         cur_dir = os.path.dirname(os.path.realpath(__file__))
@@ -194,10 +197,10 @@ def main():
     queue_depths = [1, 2, 4, 16, 128, 256, 512]
     rw_types = ['read', 'write']
     access_methods = ['rand', 'seq']
-    thread_counts = [1, 2, 4, 8]
+    thread_counts = [1]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 6
+    duration = 10
 
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     csv_file = os.path.join(cur_dir, 'results', 'benchmark_results.csv')
