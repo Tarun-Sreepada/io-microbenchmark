@@ -5,7 +5,6 @@
 
 bool print = false;
 
-
 void print_stats_thread(benchmark_params &params, 
                         std::vector<thread_stats> &thread_stats_list, 
                         std::chrono::seconds interval) 
@@ -14,7 +13,7 @@ void print_stats_thread(benchmark_params &params,
 
     // Print initial blank lines for each thread
     for (size_t i = 0; i < params.threads; ++i) {
-        std::cout << "Thread " << i << ": IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
+        std::cout << "Thread " << i << ": Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
     }
 
     while (print) 
@@ -23,6 +22,7 @@ void print_stats_thread(benchmark_params &params,
 
         uint64_t current_time = get_current_time_ns();
 
+        // Update the output for each thread
         for (size_t i = 0; i < params.threads; ++i) 
         {
             const auto &stats = thread_stats_list[i];
@@ -34,8 +34,9 @@ void print_stats_thread(benchmark_params &params,
             double throughput = static_cast<double>(stats.io_completed) / time_elapsed;
             double bandwidth = static_cast<double>(stats.io_completed * params.page_size) / (time_elapsed * KILO * KILO);
 
-            // Update the output for the current thread
-            thread_outputs[i] = "Thread " + std::to_string(i) + ": IOPS: " + 
+            // Update the output for the current thread, including elapsed time
+            thread_outputs[i] = "Thread " + std::to_string(i) + 
+                                ": Elapsed Time: " + std::to_string(static_cast<int>(time_elapsed)) + "s, IOPS: " + 
                                 std::to_string(static_cast<int>(throughput)) + 
                                 ", Bandwidth: " + 
                                 std::to_string(bandwidth) + " MB/s";
@@ -56,8 +57,6 @@ void print_stats_thread(benchmark_params &params,
 
     std::cout << "\033[" << params.threads << "F"; // Move back up to the starting position
 }
-
-
 
 
 int main(int argc, char *argv[])

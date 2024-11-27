@@ -1,7 +1,6 @@
 #include "sync.h"
 #include "config.h"
 
-
 void io_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
     // Generate offsets
@@ -39,7 +38,6 @@ void io_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uin
         stats.io_completed++;
         stats.latencies[i] = get_current_time_ns() - current_time;
         ret = 0;
-
     }
 
     stats.end_time = get_current_time_ns();
@@ -75,27 +73,41 @@ void time_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, u
             break;
         }
 
-        if (params.read_or_write == "write")
+        while (ret < params.page_size)
         {
-            while (ret < params.page_size)
+            int bytes = (params.read_or_write == "write")
+                            ? pwrite(params.fd, buffer + ret, params.page_size - ret, offsets[stats.io_completed % params.io] + ret)
+                            : pread(params.fd, buffer + ret, params.page_size - ret, offsets[stats.io_completed % params.io] + ret);
+
+            if (bytes == -1)
             {
-                ret += pwrite(params.fd, buffer + ret, params.page_size - ret, offsets[stats.io_completed % params.io] + ret);
+                // Log the error and continue
+                std::cerr << "Thread " << thread_id << " encountered an error: "
+                          << strerror(errno)
+                          << " at offset " << offsets[stats.io_completed % params.io]
+                          << "\n";
+
+                // Reset ret and proceed to the next operation
+                ret = 0;
+                break; // Exit the inner loop and try the next I/O operation
             }
-        }
-        else
-        {
-            while (ret < params.page_size)
-            {
-                ret += pread(params.fd, buffer + ret, params.page_size - ret, offsets[stats.io_completed % params.io] + ret);
-            }
+
+            ret += bytes;
         }
 
+        // Record successful I/O or attempt regardless of errors
         stats.io_completed++;
-        stats.latencies[stats.io_completed - 1] = get_current_time_ns() - current_time;
-        ret = 0;
-    }
-    stats.end_time = get_current_time_ns();
 
+        // Log latency only for successful I/O
+        if (ret > 0)
+        {
+            stats.latencies[stats.io_completed - 1] = get_current_time_ns() - current_time;
+        }
+
+        ret = 0; // Reset for the next iteration
+    }
+
+    stats.end_time = get_current_time_ns();
 
     // Free the allocated buffer
     free(buffer);

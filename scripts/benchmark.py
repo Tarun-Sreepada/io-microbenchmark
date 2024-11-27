@@ -189,7 +189,7 @@ def main():
     thread_counts = [1, 2, 4]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 15
+    duration = 10
 
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     csv_file = os.path.join(cur_dir, 'results', 'benchmark_results.csv')
