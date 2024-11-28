@@ -1,149 +1,51 @@
 #include "async.h"
 #include "config.h"
 
+
+
 // Asynchronous I/O operation using io_uring
 void io_benchmark_thread_async(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
-    // Initialize io_uring
-    struct io_uring ring;
-
-    if (io_uring_queue_init(params.queue_depth, &ring, 0) < 0)
-    {
-        throw std::runtime_error("io_uring_queue_init failed");
-    }
-
-    // Generate initial offsets
-    std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
-
-    // Allocate buffer
-    char **buffers = (char **)malloc(params.queue_depth * sizeof(char *));
-    for (int i = 0; i < params.queue_depth; i++)
-    {
-        if (posix_memalign((void **)&buffers[i], params.page_size, params.page_size) != 0)
-        {
-            throw std::runtime_error("Error allocating buffer: " + std::string(strerror(errno)));
-        }
-    }
-
-    uint64_t submitted = 0;
-
-    stats.start_time = get_current_time_ns();
-
-    while (stats.io_completed != params.io)
-    {
-        while (submitted - stats.io_completed < params.queue_depth)
-        {
-            struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-            if (!sqe)
-            {
-                break; // No more SQEs available
-            }
-
-            if (params.read_or_write == "write")
-            {
-                io_uring_prep_write(sqe, params.fd, buffers[submitted % params.queue_depth], params.page_size, offsets[submitted % params.io]);
-            }
-            else
-            { // read
-                io_uring_prep_read(sqe, params.fd, buffers[submitted % params.queue_depth], params.page_size, offsets[submitted % params.io]);
-            }
-
-            sqe->user_data = submitted; // Track request by its index
-            submitted++;
-        }
-
-        // Submit all queued requests to the kernel
-        int ret = io_uring_submit(&ring);
-
-        if (ret < 0)
-        {
-            throw std::runtime_error("io_uring_submit failed: " + std::string(strerror(-ret)));
-        }
-
-        // Retrieve completions
-        struct io_uring_cqe *cqe;
-
-        int count = io_uring_peek_batch_cqe(&ring, &cqe, params.queue_depth);
-        for (int i = 0; i < count; i++)
-        {
-
-            if (cqe->res != params.page_size)
-            {
-                // Resubmit incomplete I/O
-                struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-                if (sqe)
-                {
-                    uint64_t req_id = cqe->user_data;
-                    if (params.read_or_write == "write")
-                    {
-                        io_uring_prep_write(sqe, params.fd, buffers[req_id % params.queue_depth] + cqe->res, params.page_size - cqe->res, offsets[req_id]);
-                    }
-                    else
-                    { // read
-                        io_uring_prep_read(sqe, params.fd, buffers[req_id % params.queue_depth] + cqe->res, params.page_size - cqe->res, offsets[req_id]);
-                    }
-                    sqe->user_data = req_id; // Maintain user_data for tracking
-                    submitted++;
-                }
-                else
-                {
-                    std::cerr << "Failed to get SQE for resubmission\n";
-                }
-            }
-            else
-            {
-                // Successful completion
-                stats.io_completed++;
-            }
-
-            // Mark the CQE as seen
-            io_uring_cqe_seen(&ring, cqe);
-        }
-    }
-
-    stats.end_time = get_current_time_ns();
-
-    // Free resources
-    io_uring_queue_exit(&ring);
-
-    for (int i = 0; i < params.queue_depth; i++)
-    {
-        free(buffers[i]);
-    }
-
-    free(buffers);
+ 
 }
 
+// Time-based benchmarking using io_uring
 void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
-    // Initialize io_uring
-    struct io_uring ring;
 
-    if (io_uring_queue_init(params.queue_depth, &ring, 0) < 0)
-    {
-        throw std::runtime_error("io_uring_queue_init failed");
-    }
-
-    // Generate initial offsets
     params.io = params.duration * 1e6; // estimate number of I/O operations
     std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
 
-    // Allocate buffer
-    char **buffers = (char **)malloc(params.queue_depth * sizeof(char *));
+    // Create a new io_uring instance
+    struct io_uring ring;
+
+    // Initialize io_uring instance
+    if (io_uring_queue_init(params.queue_depth, &ring, 0) < 0)
+    {
+        std::cerr << "Error: io_uring initialization failed\n";
+        exit(1);
+    }
+
+    char **buffers = new char *[params.queue_depth];
+    bool *is_buffer_free = new bool[params.queue_depth];
+
     for (int i = 0; i < params.queue_depth; i++)
     {
         if (posix_memalign((void **)&buffers[i], params.page_size, params.page_size) != 0)
         {
             throw std::runtime_error("Error allocating buffer: " + std::string(strerror(errno)));
         }
+        is_buffer_free[i] = true;
+
     }
 
-    uint64_t submitted = 0;
+    uint32_t submitted = 0;
+
     struct io_uring_cqe *cqes[params.queue_depth];
 
     stats.start_time = get_current_time_ns();
 
-    while (true)
+    while(true)
     {
         uint64_t current_time = get_current_time_ns();
         if (current_time - stats.start_time >= params.duration * 1e9)
@@ -159,28 +61,30 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
                 break; // No more SQEs available
             }
 
-            if (params.read_or_write == "write")
+            uint32_t buffer_id = acquire_buffer(is_buffer_free, params.queue_depth);
+            if (buffer_id == -1)
             {
-                io_uring_prep_write(sqe, params.fd,
-                                    buffers[submitted % params.queue_depth],
-                                    params.page_size,
-                                    offsets[submitted % params.io]);
-            }
-            else
-            { // read
-                io_uring_prep_read(sqe, params.fd,
-                                   buffers[submitted % params.queue_depth],
-                                   params.page_size,
-                                   offsets[submitted % params.io]);
+                std::cerr << "Error: No free buffers available\n";  // This should never happen
             }
 
-            sqe->user_data = submitted; // Track request by its index
+            if (params.read_or_write == "write")
+            {
+                io_uring_prep_write(sqe, params.fd, buffers[buffer_id], params.page_size, offsets[submitted % params.io]);
+            }
+            else
+            {
+                io_uring_prep_read(sqe, params.fd, buffers[buffer_id], params.page_size, offsets[submitted % params.io]);
+            }
+
+            // in user_data, store the buffer_id and the request_id 32bit + 32bit = 64bit aka user_data is 64bit
+            sqe->user_data = combine32To64(buffer_id, submitted % params.io);
             submitted++;
         }
 
         // Submit all queued requests to the kernel
         int ret = io_uring_submit(&ring);
-        if (ret < 0)
+
+                if (ret < 0)
         {
             throw std::runtime_error("io_uring_submit failed: " + std::string(strerror(-ret)));
         }
@@ -191,7 +95,9 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
         for (int i = 0; i < count; i++)
         {
             struct io_uring_cqe *cqe = cqes[i];
+
             uint64_t req_id = cqe->user_data; // Retrieve original request ID
+            auto [buffer_id, request_id] = extractBoth32(req_id);
 
             if (cqe->res < 0)
             {
@@ -200,8 +106,8 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
             }
             else if (cqe->res != params.page_size)
             {
-                // Resubmit incomplete I/O
                 struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
+                // Resubmit incomplete I/O
                 if (sqe)
                 {
                     // Adjust remaining bytes and buffer pointer
@@ -211,19 +117,19 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
                     if (params.read_or_write == "write")
                     {
                         io_uring_prep_write(sqe, params.fd,
-                                            buffers[req_id % params.queue_depth] + bytes_done,
+                                            buffers[buffer_id] + bytes_done,
                                             remaining_bytes,
-                                            offsets[req_id] + bytes_done);
+                                            offsets[request_id] + bytes_done);
                     }
                     else
                     { // read
                         io_uring_prep_read(sqe, params.fd,
-                                           buffers[req_id % params.queue_depth] + bytes_done,
+                                           buffers[buffer_id] + bytes_done,
                                            remaining_bytes,
-                                           offsets[req_id] + bytes_done);
+                                           offsets[request_id] + bytes_done);
                     }
 
-                    sqe->user_data = req_id; // Reuse the same user_data
+                    sqe->user_data = req_id; // Maintain user_data for tracking
                 }
                 else
                 {
@@ -233,6 +139,7 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
             else
             {
                 // Successful completion
+                is_buffer_free[buffer_id] = true;
                 stats.io_completed++;
             }
 
@@ -244,6 +151,7 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
     stats.end_time = get_current_time_ns();
 
     // Free resources
+
     io_uring_queue_exit(&ring);
 
     for (int i = 0; i < params.queue_depth; i++)
@@ -252,4 +160,9 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
     }
 
     free(buffers);
+
+    delete[] is_buffer_free;
+
+    
+
 }

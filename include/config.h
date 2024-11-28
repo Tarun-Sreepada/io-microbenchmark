@@ -73,3 +73,11 @@ void print_help(const char *program_name);
 benchmark_params parse_arguments(int argc, char *argv[]);
 
 std::vector<uint64_t> generate_offsets(const benchmark_params &params, uint64_t thread_id);
+
+
+uint32_t acquire_buffer(bool *is_buffer_free, uint64_t queue_depth);
+
+uint64_t combine32To64(uint32_t higher, uint32_t lower);
+
+
+std::pair<uint32_t, uint32_t> extractBoth32(uint64_t combined);

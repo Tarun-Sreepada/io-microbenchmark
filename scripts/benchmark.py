@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import numpy as np
 from brokenaxes import brokenaxes
+from matplotlib.cm import get_cmap
 
 def run_benchmark(queue_depths, rw_types, access_methods, thread_counts, engines, num_runs, duration, csv_file):
     """
@@ -116,19 +117,25 @@ def parse_output(output):
 
 
 def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines):
+    fig_size = (8, 8)
+
     df = pd.read_csv(csv_file)
     grouped = df.groupby(['engine', 'rw', 'method', 'threads', 'queue_depth']).mean().reset_index()
 
     for threads in thread_counts:
-        fig, axes = plt.subplots(len(rw_types), len(access_methods), figsize=(20, 15))
-        fig_bandwidth, axes_bandwidth = plt.subplots(len(rw_types), len(access_methods), figsize=(20, 15))
+        fig, axes = plt.subplots(len(rw_types), len(access_methods), figsize=fig_size, squeeze=False)
+        fig_bandwidth, axes_bandwidth = plt.subplots(len(rw_types), len(access_methods), figsize=fig_size, squeeze=False)
 
         for i, rw in enumerate(rw_types):
             for j, method in enumerate(access_methods):
                 ax = axes[i, j]
                 ax_bandwidth = axes_bandwidth[i, j]
 
-                for engine in engines:
+                cmap = get_cmap('tab10')  # Use a colormap (e.g., 'tab10')
+                colors = [cmap(k) for k in range(len(engines))]  # Generate colors
+
+                for engine_idx, engine in enumerate(engines):
+                    color = colors[engine_idx]  # Assign color for the engine
                     df_filtered = grouped[
                         (grouped['engine'] == engine) &
                         (grouped['rw'] == rw) &
@@ -144,17 +151,40 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
                     iops_list = df_qd['iops'].values
                     bandwidth_list = df_qd['bandwidth'].values
 
-                    ax.plot(qd_list, iops_list, linestyle='-', marker='o', label=engine)
-                    ax_bandwidth.plot(qd_list, bandwidth_list, linestyle='-', marker='o', label=engine)
+                    ax.plot(qd_list, iops_list, linestyle='-', marker='o', label=engine, color=color)
+                    ax_bandwidth.plot(qd_list, bandwidth_list, linestyle='-', marker='o', label=engine, color=color)
 
+                    # Annotate improvement factors for IOPS
+                    for idx in range(1, len(qd_list)):
+                        if iops_list[idx - 1] > 0:  # Avoid division by zero
+                            improvement_factor_iops = iops_list[idx] / iops_list[idx - 1]
+                            ax.annotate(
+                                f"{improvement_factor_iops:.1f}x",
+                                xy=(qd_list[idx], iops_list[idx]),
+                                xytext=(qd_list[idx], iops_list[idx] + iops_list[idx] * 0.1),
+                                fontsize=10,
+                                color=color,  # Use the same color
+                                ha='center'
+                            )
 
+                    # Annotate improvement factors for Bandwidth
+                    for idx in range(1, len(qd_list)):
+                        if bandwidth_list[idx - 1] > 0:  # Avoid division by zero
+                            improvement_factor_bandwidth = bandwidth_list[idx] / bandwidth_list[idx - 1]
+                            ax_bandwidth.annotate(
+                                f"{improvement_factor_bandwidth:.1f}x",
+                                xy=(qd_list[idx], bandwidth_list[idx]),
+                                xytext=(qd_list[idx], bandwidth_list[idx] + bandwidth_list[idx] * 0.1),
+                                fontsize=10,
+                                color=color,  # Use the same color
+                                ha='center'
+                            )
 
                 ax.set_title(f'IOPS - {rw.capitalize()} {method.capitalize()}')
                 ax.set_xlabel('Queue Depth')
                 ax.set_ylabel('IOPS')
                 ax.set_xscale('log', base=2)
                 ax.legend()
-
 
                 ax_bandwidth.set_xscale('log', base=2)
                 ax_bandwidth.set_title(f'Bandwidth - {rw.capitalize()} {method.capitalize()}')
@@ -163,8 +193,12 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
                 ax_bandwidth.legend()
 
         cur_dir = os.path.dirname(os.path.realpath(__file__))
+        os.makedirs(os.path.join(cur_dir, 'results'), exist_ok=True)
         fig.savefig(os.path.join(cur_dir, 'results', f'iops_threads_{threads}.png'))
         fig_bandwidth.savefig(os.path.join(cur_dir, 'results', f'bandwidth_threads_{threads}.png'))
+
+        plt.close(fig)
+        plt.close(fig_bandwidth)
 
 
 
@@ -194,13 +228,13 @@ def test():
 
 
 def main():
-    queue_depths = [1, 2, 4, 16, 128, 256, 512]
-    rw_types = ['read', 'write']
-    access_methods = ['rand', 'seq']
+    queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    rw_types = ['read']
+    access_methods = ['rand']
     thread_counts = [1]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 5
+    duration = 10
 
     # if results folder does not exist where the script is located, create it
     if not os.path.exists(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results')):

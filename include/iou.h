@@ -48,6 +48,9 @@ struct io_data
     void *buf;
     off_t offset;
     size_t length;
+
+    uint32_t buffer_id;
+    uint32_t request_id;
 };
 
 

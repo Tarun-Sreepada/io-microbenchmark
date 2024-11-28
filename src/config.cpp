@@ -103,6 +103,23 @@ benchmark_params parse_arguments(int argc, char *argv[]) {
         exit(1);
     }
 
+
+    if (params.engine != "sync" && params.engine != "liburing" && params.engine != "io_uring") {
+        std::cerr << "Error: Invalid engine.\n";
+        exit(1);
+    }
+
+    if (params.seq_or_rand != "seq" && params.seq_or_rand != "rand") {
+        std::cerr << "Error: Invalid method.\n";
+        exit(1);
+    }
+
+    if (params.read_or_write != "read" && params.read_or_write != "write") {
+        std::cerr << "Error: Invalid operation type.\n";
+        exit(1);
+    }
+
+
     // if write add flag O_SYNC to ensure data is written to disk
     if (params.read_or_write == "write") {
         params.fd = open(params.location.c_str(), O_RDWR | O_DIRECT);
@@ -222,4 +239,29 @@ std::vector<uint64_t> generate_offsets(const benchmark_params &params, uint64_t 
     }
 
     return offsets;
+}
+
+
+uint32_t acquire_buffer(bool *is_buffer_free, uint64_t queue_depth)
+{
+    for (uint32_t i = 0; i < queue_depth; i++)
+    {
+        if (is_buffer_free[i])
+        {
+            is_buffer_free[i] = false;
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+uint64_t combine32To64(uint32_t buffer_id, uint32_t request_id) {
+    return (static_cast<uint64_t>(buffer_id) << 32) | request_id;
+}
+
+std::pair<uint32_t, uint32_t> extractBoth32(uint64_t combined) {
+    uint32_t request_id = static_cast<uint32_t>(combined & 0xFFFFFFFF);
+    uint32_t buffer_id = static_cast<uint32_t>((combined >> 32) & 0xFFFFFFFF);
+    return {buffer_id, request_id};
 }

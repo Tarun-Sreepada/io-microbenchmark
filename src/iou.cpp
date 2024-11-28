@@ -2,71 +2,6 @@
 #include "config.h"
 #include <condition_variable>
 
-std::queue<struct io_uring_cqe *> cqe_queue;
-std::mutex queue_mutex;
-std::condition_variable cv;
-std::atomic<bool> stop_reaping(false);
-
-
-void reap_cqes_async(submitter *s, uint64_t &completed_ios) {
-    struct app_io_cq_ring *cring = &s->cq_ring;
-    unsigned head;
-
-    while (!stop_reaping) {
-        head = *cring->head;
-        unsigned tail = *cring->tail;
-
-        while (head != tail) {
-            read_barrier();
-            struct io_uring_cqe *cqe = &cring->cqes[head & *cring->ring_mask];
-
-            {
-                // Push CQE to the queue for async processing
-                std::lock_guard<std::mutex> lock(queue_mutex);
-                cqe_queue.push(cqe);
-            }
-            cv.notify_one();
-
-            head++;
-            // completed_ios++;
-        }
-
-        *cring->head = head;
-        write_barrier();
-
-        // Avoid busy waiting
-        // std::this_thread::sleep_for(std::chrono::microseconds(1));
-    }
-}
-
-void process_cqes(size_t page_size, uint64_t &completed_ios) {
-    while (!stop_reaping) {
-        struct io_uring_cqe *cqe = nullptr;
-
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            cv.wait(lock, [] { return !cqe_queue.empty() || stop_reaping; });
-
-            if (stop_reaping && cqe_queue.empty()) {
-                break;
-            }
-
-            cqe = cqe_queue.front();
-            cqe_queue.pop();
-        }
-
-        if (cqe) {
-            struct io_data *io = (struct io_data *)cqe->user_data;
-
-            if ((size_t)cqe->res == page_size) {
-                completed_ios++;
-            }
-
-            free(io->buf);
-            delete io;
-        }
-    }
-}
 
 int app_setup_uring(struct submitter *s, int queue_depth)
 {
@@ -137,8 +72,7 @@ int app_setup_uring(struct submitter *s, int queue_depth)
 
     return 0;
 }
-
-void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, bool is_read, struct io_data *io)
+void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, bool is_read, struct io_data *io, char *buffer, int buffer_id, int request_id)
 {
     struct app_io_sq_ring *sring = &s->sq_ring;
     unsigned tail, index;
@@ -151,11 +85,9 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
 
     io->length = block_size;
     io->offset = offset;
-    if (posix_memalign(&io->buf, 4096, block_size))
-    { // Align to 4096 bytes
-        perror("posix_memalign");
-        exit(1);
-    }
+    io->buf = buffer;
+    io->buffer_id = buffer_id;
+    io->request_id = request_id;
 
     sqe->fd = fd;
     sqe->addr = (unsigned long)io->buf;
@@ -170,7 +102,6 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
     else
     {
         sqe->opcode = IORING_OP_WRITE;
-        memset(io->buf, 0xAA, block_size); // Fill buffer with dummy data
     }
 
     sring->array[index] = index;
@@ -179,14 +110,10 @@ void submit_io(struct submitter *s, int fd, size_t block_size, off_t offset, boo
     write_barrier();
 }
 
-void reap_cqes(submitter *s, uint64_t ret, uint64_t &completed_ios)
+void reap_cqes(struct submitter *s, uint64_t &completed_ios, bool *is_buffer_free)
 {
     struct app_io_cq_ring *cring = &s->cq_ring;
-    unsigned head;
-
-    head = *cring->head;
-
-
+    unsigned head = *cring->head;
 
     while (head != *cring->tail)
     {
@@ -203,8 +130,13 @@ void reap_cqes(submitter *s, uint64_t ret, uint64_t &completed_ios)
             std::cerr << "Partial I/O: " << cqe->res << " bytes" << std::endl;
         }
 
-        free(io->buf);
-        delete io;
+        // Mark the buffer as free for reuse
+        if (io->buffer_id >= 0) {  // Ensure buffer_id is valid
+            is_buffer_free[io->buffer_id] = true;
+        }
+        else {
+            std::cerr << "Invalid buffer_id: " << io->buffer_id << std::endl;
+        }
 
         head++;
         completed_ios++;
@@ -217,63 +149,12 @@ void reap_cqes(submitter *s, uint64_t ret, uint64_t &completed_ios)
 void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
 
-    params.io = params.duration * 1e6; // estimate number of I/O operations
-    std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
-
-    struct submitter *s = new submitter();
-
-    if (app_setup_uring(s, params.queue_depth))
-    {
-        throw std::runtime_error("Error setting up io_uring");
-    }
-
-    uint64_t submitted, to_submit = 0;
-    submitted = 0;
-
-    stats.start_time = get_current_time_ns();
-
-    while(true)
-    {
-        if (stats.io_completed >= params.io)
-        {
-            break;
-        }
-
-        while ((submitted - stats.io_completed) < params.queue_depth)
-        {
-            struct io_data *io = new io_data();
-            submit_io(s, params.fd, params.page_size, offsets[submitted % params.io], params.read_or_write == "read", io);
-            submitted++;
-            to_submit++;
-        }
-
-        int ret = io_uring_enter(s->ring_fd, to_submit, 1, IORING_ENTER_GETEVENTS, NULL);
-        if (ret < 0)
-        {
-            throw std::runtime_error("io_uring_enter failed: " + std::string(strerror(-ret)));
-        }
-        to_submit = 0;
-
-        reap_cqes(s, ret, stats.io_completed);
-    }
-
-    stats.end_time = get_current_time_ns();
-
-    munmap(s->sq_ptr, s->sring_sz);
-    if (s->cq_ptr && s->cq_ptr != s->sq_ptr)
-    {
-        munmap(s->cq_ptr, s->cring_sz);
-    }
-    munmap(s->sqes, s->sqes_sz);
-    close(s->ring_fd);
-
-    delete s;
-
 }
+
+
 
 void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
-
     params.io = params.duration * 1e6; // estimate number of I/O operations
     std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
 
@@ -284,15 +165,24 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
         throw std::runtime_error("Error setting up io_uring");
     }
 
-    uint64_t submitted, to_submit = 0;
-    submitted = 0;
+    char **buffers = new char *[params.queue_depth];
+    bool *is_buffer_free = new bool[params.queue_depth];
+    struct io_data **io_data_pool = new struct io_data *[params.queue_depth];
+    for (int i = 0; i < params.queue_depth; i++)
+    {
+        if (posix_memalign((void **)&buffers[i], params.page_size, params.page_size))
+        {
+            throw std::runtime_error("posix_memalign failed");
+        }
+        is_buffer_free[i] = true;
+        io_data_pool[i] = new io_data(); // Preallocate io_data structures
+    }
+
+    uint64_t submitted = 0, to_submit = 0;
 
     stats.start_time = get_current_time_ns();
 
-    std::thread reaper_thread(reap_cqes_async, s, std::ref(stats.io_completed));
-    std::thread processing_thread(process_cqes, params.page_size, std::ref(stats.io_completed));
-
-    while(true)
+    while (true)
     {
         uint64_t current_time = get_current_time_ns();
         if (current_time - stats.start_time >= params.duration * 1e9)
@@ -302,28 +192,38 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
 
         while ((submitted - stats.io_completed) < params.queue_depth)
         {
-            struct io_data *io = new io_data();
-            submit_io(s, params.fd, params.page_size, offsets[submitted % params.io], params.read_or_write == "read", io);
-            submitted++;
+            uint32_t buffer_id = acquire_buffer(is_buffer_free, params.queue_depth);
+            if (buffer_id == -1)
+            {
+                break;
+            }
+
+            struct io_data *io = io_data_pool[buffer_id]; // Reuse preallocated io_data
+            submit_io(s, params.fd, params.page_size, offsets[submitted], params.read_or_write == "read", io, buffers[buffer_id], buffer_id, submitted);
             to_submit++;
+            submitted++;
         }
 
-        int ret = io_uring_enter(s->ring_fd, to_submit, 0, IORING_ENTER_GETEVENTS, NULL);
+        int ret = io_uring_enter(s->ring_fd, to_submit, 1, IORING_ENTER_GETEVENTS, NULL);
         if (ret < 0)
         {
             throw std::runtime_error("io_uring_enter failed: " + std::string(strerror(-ret)));
         }
         to_submit = 0;
 
-        // reap_cqes(s, ret, stats.io_completed);
+        reap_cqes(s, stats.io_completed, is_buffer_free);
     }
 
     stats.end_time = get_current_time_ns();
 
-    stop_reaping = true;
-    cv.notify_all();
-    reaper_thread.join();
-    processing_thread.join();
+    for (int i = 0; i < params.queue_depth; i++)
+    {
+        free(buffers[i]);
+        delete io_data_pool[i];
+    }
+    delete[] buffers;
+    delete[] is_buffer_free;
+    delete[] io_data_pool;
 
     munmap(s->sq_ptr, s->sring_sz);
     if (s->cq_ptr && s->cq_ptr != s->sq_ptr)
@@ -334,6 +234,4 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
     close(s->ring_fd);
 
     delete s;
-
-
 }
