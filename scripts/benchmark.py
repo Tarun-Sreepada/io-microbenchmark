@@ -117,10 +117,12 @@ def parse_output(output):
 
 
 def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines):
-    fig_size = (8, 8)
+    fig_size = (25, 25)
 
     df = pd.read_csv(csv_file)
     grouped = df.groupby(['engine', 'rw', 'method', 'threads', 'queue_depth']).mean().reset_index()
+
+    max_offset = 0.01  # Maximum offset as a fraction of the data point value
 
     for threads in thread_counts:
         fig, axes = plt.subplots(len(rw_types), len(access_methods), figsize=fig_size, squeeze=False)
@@ -158,10 +160,11 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
                     for idx in range(1, len(qd_list)):
                         if iops_list[idx - 1] > 0:  # Avoid division by zero
                             improvement_factor_iops = iops_list[idx] / iops_list[idx - 1]
+                            offset = min(max_offset * iops_list[idx], 10)  # Constrain the offset
                             ax.annotate(
-                                f"{improvement_factor_iops:.1f}x",
+                                f"{improvement_factor_iops:.3f}x",
                                 xy=(qd_list[idx], iops_list[idx]),
-                                xytext=(qd_list[idx], iops_list[idx] + iops_list[idx] * 0.1),
+                                xytext=(qd_list[idx], iops_list[idx] + offset),
                                 fontsize=10,
                                 color=color,  # Use the same color
                                 ha='center'
@@ -171,10 +174,11 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
                     for idx in range(1, len(qd_list)):
                         if bandwidth_list[idx - 1] > 0:  # Avoid division by zero
                             improvement_factor_bandwidth = bandwidth_list[idx] / bandwidth_list[idx - 1]
+                            offset = min(max_offset * bandwidth_list[idx], 10)  # Constrain the offset
                             ax_bandwidth.annotate(
-                                f"{improvement_factor_bandwidth:.1f}x",
+                                f"{improvement_factor_bandwidth:.3f}x",
                                 xy=(qd_list[idx], bandwidth_list[idx]),
-                                xytext=(qd_list[idx], bandwidth_list[idx] + bandwidth_list[idx] * 0.1),
+                                xytext=(qd_list[idx], bandwidth_list[idx] + offset),
                                 fontsize=10,
                                 color=color,  # Use the same color
                                 ha='center'
@@ -199,7 +203,6 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
 
         plt.close(fig)
         plt.close(fig_bandwidth)
-
 
 
 def test():
@@ -229,12 +232,12 @@ def test():
 
 def main():
     queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-    rw_types = ['read']
-    access_methods = ['rand']
+    rw_types = ['read', 'write']
+    access_methods = ['rand', 'seq']
     thread_counts = [1]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 10
+    duration = 4
 
     # if results folder does not exist where the script is located, create it
     if not os.path.exists(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results')):
