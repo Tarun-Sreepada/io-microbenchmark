@@ -233,5 +233,12 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
     munmap(s->sqes, s->sqes_sz);
     close(s->ring_fd);
 
+    for (int i = 0; i < params.queue_depth; i++)
+    {
+        free(buffers[i]);
+    }
+
+    delete[] buffers;
+
     delete s;
 }

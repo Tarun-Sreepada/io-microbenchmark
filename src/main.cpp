@@ -11,16 +11,20 @@ void print_stats_thread(benchmark_params &params,
 {
     std::vector<std::string> thread_outputs(params.threads); // Store outputs for each thread
 
-    // Print initial blank lines for each thread
+    // Print initial blank lines for each thread and one for aggregate stats
     for (size_t i = 0; i < params.threads; ++i) {
         std::cout << "Thread " << i << ": Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
     }
+    std::cout << "All Threads: Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
 
     while (print) 
     {
         std::this_thread::sleep_for(interval);
 
         uint64_t current_time = get_current_time_ns();
+
+        uint64_t total_io_completed = 0;
+        double total_bandwidth = 0.0;
 
         // Update the output for each thread
         for (size_t i = 0; i < params.threads; ++i) 
@@ -34,6 +38,9 @@ void print_stats_thread(benchmark_params &params,
             double throughput = static_cast<double>(stats.io_completed) / time_elapsed;
             double bandwidth = static_cast<double>(stats.io_completed * params.page_size) / (time_elapsed * KILO * KILO);
 
+            total_io_completed += stats.io_completed; // Sum up completed IOs
+            total_bandwidth += bandwidth; // Sum up bandwidth for all threads
+
             // Update the output for the current thread, including elapsed time
             thread_outputs[i] = "Thread " + std::to_string(i) + 
                                 ": Elapsed Time: " + std::to_string(static_cast<int>(time_elapsed)) + "s, IOPS: " + 
@@ -42,20 +49,30 @@ void print_stats_thread(benchmark_params &params,
                                 std::to_string(bandwidth) + " MB/s";
         }
 
+        // Calculate aggregated stats
+        double elapsed_time = (current_time - thread_stats_list[0].start_time) / 1e9;
+        double aggregate_iops = total_io_completed / elapsed_time;
+
         // Move the cursor up to the start of the thread outputs
-        std::cout << "\033[" << params.threads << "F"; // Move up to the first thread's line
+        std::cout << "\033[" << params.threads + 1 << "F"; // Move up to the first thread's line
         for (const auto &output : thread_outputs) {
             std::cout << "\r\033[2K" << output << std::endl; // Clear and update each line
         }
+
+        // Update aggregate stats
+        std::cout << "\r\033[2KAll Threads: Elapsed Time: " 
+                  << static_cast<int>(elapsed_time) 
+                  << "s, IOPS: " << static_cast<int>(aggregate_iops) 
+                  << ", Bandwidth: " << total_bandwidth << " MB/s" << std::endl;
     }
 
     // Final cleanup: clear the lines and reset cursor position
-    std::cout << "\033[" << params.threads << "F"; // Move up to the first thread's line
-    for (size_t i = 0; i < params.threads; ++i) {
+    std::cout << "\033[" << params.threads + 1 << "F"; // Move up to the first thread's line
+    for (size_t i = 0; i < params.threads + 1; ++i) {
         std::cout << "\r\033[2K" << std::endl; // Clear each line
     }
 
-    std::cout << "\033[" << params.threads << "F"; // Move back up to the starting position
+    std::cout << "\033[" << params.threads + 1 << "F"; // Move back up to the starting position
 }
 
 

@@ -159,10 +159,9 @@ void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, 
         free(buffers[i]);
     }
 
-    free(buffers);
-
+    
+    delete[] buffers;
     delete[] is_buffer_free;
 
-    
 
 }

@@ -116,6 +116,109 @@ def parse_output(output):
     return iops, bandwidth
 
 
+def plot_results_update(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths):
+    fig_size = (15, 15)
+
+    df = pd.read_csv(csv_file)
+    grouped = df.groupby(['engine', 'rw', 'method', 'threads', 'queue_depth']).mean().reset_index()
+
+    max_offset_fraction = 0.01  # Maximum offset as a fraction of the data point value
+    min_offset = 10  # Minimum offset to prevent overlapping text
+
+    for rw in rw_types:
+        for method in access_methods:
+            fig, ax_iops = plt.subplots(figsize=fig_size)
+            fig_bandwidth, ax_bandwidth = plt.subplots(figsize=fig_size)
+
+            cmap = get_cmap('tab10')  # Use a colormap (e.g., 'tab10')
+            colors = [cmap(k) for k in range(len(engines) * len(queue_depths))]  # Generate colors
+            color_idx = 0
+
+            for engine in engines:
+                for qd in queue_depths:
+                    color = colors[color_idx]  # Assign color for the engine + queue depth combo
+                    color_idx += 1
+
+                    df_filtered = grouped[
+                        (grouped['engine'] == engine) &
+                        (grouped['rw'] == rw) &
+                        (grouped['method'] == method) &
+                        (grouped['queue_depth'] == qd)
+                    ]
+
+                    df_threads = df_filtered.set_index('threads').reindex(thread_counts)
+                    df_threads['iops'] = df_threads['iops'].interpolate(method='linear').fillna(method='bfill').fillna(method='ffill')
+                    df_threads['bandwidth'] = df_threads['bandwidth'].interpolate(method='linear').fillna(method='bfill').fillna(method='ffill')
+
+                    threads_list = thread_counts
+                    iops_list = df_threads['iops'].values
+                    bandwidth_list = df_threads['bandwidth'].values
+
+                    # Plot IOPS
+                    ax_iops.plot(threads_list, iops_list, linestyle='-', marker='o',
+                                 label=f"{engine} (QD={qd})", color=color)
+
+                    # Plot Bandwidth
+                    ax_bandwidth.plot(threads_list, bandwidth_list, linestyle='-', marker='o',
+                                      label=f"{engine} (QD={qd})", color=color)
+
+                    # Annotate improvement factors for IOPS
+                    previous_iops = None
+                    for idx, (thread, iops) in enumerate(zip(threads_list, iops_list)):
+                        if previous_iops is not None and previous_iops > 0:
+                            improvement_factor = iops / previous_iops
+                            offset = max(min_offset, max_offset_fraction * iops)  # Adjust offset dynamically
+                            ax_iops.annotate(
+                                f"{improvement_factor:.2f}x",
+                                xy=(thread, iops),
+                                xytext=(thread, iops + offset),
+                                fontsize=15,
+                                color=color,
+                                ha='center',
+                                arrowprops=dict(arrowstyle='-', lw=0.5, color=color)
+                            )
+                        previous_iops = iops
+
+                    # Annotate improvement factors for Bandwidth
+                    previous_bandwidth = None
+                    for idx, (thread, bandwidth) in enumerate(zip(threads_list, bandwidth_list)):
+                        if previous_bandwidth is not None and previous_bandwidth > 0:
+                            improvement_factor = bandwidth / previous_bandwidth
+                            offset = max(min_offset, max_offset_fraction * bandwidth)  # Adjust offset dynamically
+                            ax_bandwidth.annotate(
+                                f"{improvement_factor:.2f}x",
+                                xy=(thread, bandwidth),
+                                xytext=(thread, bandwidth + offset),
+                                fontsize=15,
+                                color=color,
+                                ha='center',
+                                arrowprops=dict(arrowstyle='-', lw=0.5, color=color)
+                            )
+                        previous_bandwidth = bandwidth
+
+            # Set up titles, labels, and legends for IOPS
+            ax_iops.set_title(f'IOPS - {rw.capitalize()} {method.capitalize()}')
+            ax_iops.set_xlabel('Number of Threads')
+            ax_iops.set_ylabel('IOPS')
+            # ax_iops.set_xscale('log', base=2)
+            ax_iops.legend()
+
+            # Set up titles, labels, and legends for Bandwidth
+            ax_bandwidth.set_title(f'Bandwidth - {rw.capitalize()} {method.capitalize()}')
+            ax_bandwidth.set_xlabel('Number of Threads')
+            ax_bandwidth.set_ylabel('Bandwidth (MB/s)')
+            # ax_bandwidth.set_xscale('log', base=2)
+            ax_bandwidth.legend()
+
+            # Save figures
+            cur_dir = os.path.dirname(os.path.realpath(__file__))
+            os.makedirs(os.path.join(cur_dir, 'results'), exist_ok=True)
+            fig.savefig(os.path.join(cur_dir, 'results', f'iops_{rw}_{method}.png'))
+            fig_bandwidth.savefig(os.path.join(cur_dir, 'results', f'bandwidth_{rw}_{method}.png'))
+
+            plt.close(fig)
+            plt.close(fig_bandwidth)
+
 def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines):
     fig_size = (25, 25)
 
@@ -234,10 +337,10 @@ def main():
     queue_depths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
     rw_types = ['read', 'write']
     access_methods = ['rand', 'seq']
-    thread_counts = [1]
+    thread_counts = [1,2,4]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 4
+    duration = 3
 
     # if results folder does not exist where the script is located, create it
     if not os.path.exists(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results')):
@@ -254,7 +357,7 @@ def main():
         print(f'{csv_file} exists. Skipping benchmark execution and plotting existing data.')
 
     # Plot results
-    plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines)
+    plot_results_update(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines)
 
 
 if __name__ == '__main__':
