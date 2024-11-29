@@ -81,3 +81,5 @@ uint64_t combine32To64(uint32_t higher, uint32_t lower);
 
 
 std::pair<uint32_t, uint32_t> extractBoth32(uint64_t combined);
+
+void pin_thread(uint64_t thread_id);

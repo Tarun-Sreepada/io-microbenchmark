@@ -5,17 +5,33 @@
 
 bool print = false;
 
+
+enum class PrintMode {
+    Individual,
+    Cumulative,
+    Both
+};
+
 void print_stats_thread(benchmark_params &params, 
                         std::vector<thread_stats> &thread_stats_list, 
-                        std::chrono::seconds interval) 
+                        std::chrono::milliseconds interval,
+                        PrintMode print_mode) 
 {
     std::vector<std::string> thread_outputs(params.threads); // Store outputs for each thread
 
-    // Print initial blank lines for each thread and one for aggregate stats
-    for (size_t i = 0; i < params.threads; ++i) {
-        std::cout << "Thread " << i << ": Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
+    // Print initial lines
+    if (print_mode == PrintMode::Individual || print_mode == PrintMode::Both) {
+        for (size_t i = 0; i < params.threads; ++i) {
+            std::cout << "-----" << std::endl;
+            std::cout << "Thread " << i << ": Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
+            std::cout << "-----" << std::endl;
+        }
     }
-    std::cout << "All Threads: Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
+    if (print_mode == PrintMode::Cumulative || print_mode == PrintMode::Both) {
+        std::cout << "-----" << std::endl;
+        std::cout << "All Threads: Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s" << std::endl;
+        std::cout << "-----" << std::endl;
+    }
 
     while (print) 
     {
@@ -23,10 +39,10 @@ void print_stats_thread(benchmark_params &params,
 
         uint64_t current_time = get_current_time_ns();
 
-        uint64_t total_io_completed = 0;
-        double total_bandwidth = 0.0;
+        double io_sum = 0;
+        double bandwidth_sum = 0;
 
-        // Update the output for each thread
+        // Calculate and store stats for each thread
         for (size_t i = 0; i < params.threads; ++i) 
         {
             const auto &stats = thread_stats_list[i];
@@ -38,42 +54,38 @@ void print_stats_thread(benchmark_params &params,
             double throughput = static_cast<double>(stats.io_completed) / time_elapsed;
             double bandwidth = static_cast<double>(stats.io_completed * params.page_size) / (time_elapsed * KILO * KILO);
 
-            total_io_completed += stats.io_completed; // Sum up completed IOs
-            total_bandwidth += bandwidth; // Sum up bandwidth for all threads
+            io_sum += throughput;
+            bandwidth_sum += bandwidth;
 
-            // Update the output for the current thread, including elapsed time
+            // Update the output for the current thread
             thread_outputs[i] = "Thread " + std::to_string(i) + 
-                                ": Elapsed Time: " + std::to_string(static_cast<int>(time_elapsed)) + "s, IOPS: " + 
+                                ": Elapsed Time: " + std::to_string(static_cast<double>(time_elapsed)) + "s, IOPS: " + 
                                 std::to_string(static_cast<int>(throughput)) + 
                                 ", Bandwidth: " + 
                                 std::to_string(bandwidth) + " MB/s";
         }
 
-        // Calculate aggregated stats
-        double elapsed_time = (current_time - thread_stats_list[0].start_time) / 1e9;
-        double aggregate_iops = total_io_completed / elapsed_time;
-
-        // Move the cursor up to the start of the thread outputs
-        std::cout << "\033[" << params.threads + 1 << "F"; // Move up to the first thread's line
-        for (const auto &output : thread_outputs) {
-            std::cout << "\r\033[2K" << output << std::endl; // Clear and update each line
+        // Print outputs based on the selected mode
+        if (print_mode == PrintMode::Individual || print_mode == PrintMode::Both) {
+            for (const auto &output : thread_outputs) {
+                std::cout << output << std::endl;
+            }
         }
 
-        // Update aggregate stats
-        std::cout << "\r\033[2KAll Threads: Elapsed Time: " 
-                  << static_cast<int>(elapsed_time) 
-                  << "s, IOPS: " << static_cast<int>(aggregate_iops) 
-                  << ", Bandwidth: " << total_bandwidth << " MB/s" << std::endl;
-    }
 
-    // Final cleanup: clear the lines and reset cursor position
-    std::cout << "\033[" << params.threads + 1 << "F"; // Move up to the first thread's line
-    for (size_t i = 0; i < params.threads + 1; ++i) {
-        std::cout << "\r\033[2K" << std::endl; // Clear each line
-    }
+        if (print_mode == PrintMode::Cumulative || print_mode == PrintMode::Both) {
+            double total_time_elapsed = (current_time - thread_stats_list[0].start_time) / 1e9;
+            std::cout << "All Threads: Elapsed Time: " 
+                      << static_cast<double>(total_time_elapsed) << "s, IOPS: " 
+                      << static_cast<int>(io_sum) << ", Bandwidth: " 
+                      << bandwidth_sum << " MB/s" << std::endl;
+        }
 
-    std::cout << "\033[" << params.threads + 1 << "F"; // Move back up to the starting position
+        std::cout << "-----" << std::endl;
+
+    }
 }
+
 
 
 int main(int argc, char *argv[])
@@ -85,7 +97,7 @@ int main(int argc, char *argv[])
 
     // launch a thread that constantly prints statistics every second
     print = true;
-    std::thread stats_thread(print_stats_thread, std::ref(params), std::ref(thread_stats_list), std::chrono::seconds(1));
+    std::thread stats_thread(print_stats_thread, std::ref(params), std::ref(thread_stats_list), std::chrono::milliseconds(500), PrintMode::Both);
 
 
     for (uint64_t i = 0; i < params.threads; ++i)

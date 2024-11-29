@@ -155,6 +155,11 @@ void io_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint
 
 void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
+
+    pin_thread(thread_id);
+    std::cout << "Pin thread " << thread_id << std::endl;
+
+
     params.io = params.duration * 1e6; // estimate number of I/O operations
     std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
 
@@ -233,12 +238,6 @@ void time_benchmark_thread_iou(benchmark_params &params, thread_stats &stats, ui
     munmap(s->sqes, s->sqes_sz);
     close(s->ring_fd);
 
-    for (int i = 0; i < params.queue_depth; i++)
-    {
-        free(buffers[i]);
-    }
-
-    delete[] buffers;
 
     delete s;
 }

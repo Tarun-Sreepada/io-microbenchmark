@@ -265,3 +265,15 @@ std::pair<uint32_t, uint32_t> extractBoth32(uint64_t combined) {
     uint32_t buffer_id = static_cast<uint32_t>((combined >> 32) & 0xFFFFFFFF);
     return {buffer_id, request_id};
 }
+
+void pin_thread(uint64_t thread_id)
+{
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(thread_id % std::thread::hardware_concurrency(), &cpuset);
+
+    if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0)
+    {
+        std::cerr << "Error: Unable to pin thread to core\n";
+    }
+}

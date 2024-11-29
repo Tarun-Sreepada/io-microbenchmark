@@ -13,6 +13,11 @@ void io_benchmark_thread_async(benchmark_params &params, thread_stats &stats, ui
 void time_benchmark_thread_async(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
 
+    // pin the thread to a specific core
+    pin_thread(thread_id);
+
+
+
     params.io = params.duration * 1e6; // estimate number of I/O operations
     std::vector<uint64_t> offsets = generate_offsets(params, thread_id);
 

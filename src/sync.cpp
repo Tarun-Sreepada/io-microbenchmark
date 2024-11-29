@@ -49,6 +49,8 @@ void io_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uin
 void time_benchmark_thread_sync(benchmark_params &params, thread_stats &stats, uint64_t thread_id)
 {
 
+    pin_thread(thread_id);
+
     params.io = 1e6 * params.duration; // 1M I/O operations per second theoretically
     stats.latencies.resize(params.io, 0);
 
