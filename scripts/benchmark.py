@@ -130,8 +130,8 @@ def plot_results_update(csv_file, thread_counts, rw_types, access_methods, engin
             fig, ax_iops = plt.subplots(figsize=fig_size)
             fig_bandwidth, ax_bandwidth = plt.subplots(figsize=fig_size)
 
-            cmap = get_cmap('tab10')  # Use a colormap (e.g., 'tab10')
-            colors = [cmap(k) for k in range(len(engines) * len(queue_depths))]  # Generate colors
+            cmap = get_cmap('gist_ncar')  # Use a colormap (e.g., 'tab10')
+            colors = [cmap(k*10) for k in range(len(engines) * len(queue_depths))]  # Generate colors
             color_idx = 0
 
             for engine in engines:
@@ -218,6 +218,8 @@ def plot_results_update(csv_file, thread_counts, rw_types, access_methods, engin
 
             plt.close(fig)
             plt.close(fig_bandwidth)
+
+
 
 def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines):
     fig_size = (25, 25)
@@ -357,7 +359,8 @@ def main():
         print(f'{csv_file} exists. Skipping benchmark execution and plotting existing data.')
 
     # Plot results
-    plot_results_update(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines)
+    plot_results_update(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths)
+    # plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines)
 
 
 if __name__ == '__main__':
