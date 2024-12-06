@@ -66,5 +66,6 @@
         "csignal": "cpp",
         "list": "cpp",
         "io_uring.h": "c"
-    }
+    },
+    "svg.preview.background": "white"
 }

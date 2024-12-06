@@ -6,101 +6,101 @@ Thread 0: Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s
 All Threads: Elapsed Time: 0s, IOPS: 0, Bandwidth: 0 MB/s
 -----
 Pin thread 0
-Thread 0: Elapsed Time: 0.305907s, IOPS: 12111, Bandwidth: 49.608734 MB/s
-All Threads: Elapsed Time: 0.305907s, IOPS: 12111, Bandwidth: 49.6087 MB/s
+Thread 0: Elapsed Time: 0.308599s, IOPS: 11367, Bandwidth: 46.561243 MB/s
+All Threads: Elapsed Time: 0.308599s, IOPS: 11367, Bandwidth: 46.5612 MB/s
 -----
-Thread 0: Elapsed Time: 0.806150s, IOPS: 11909, Bandwidth: 48.782125 MB/s
-All Threads: Elapsed Time: 0.80615s, IOPS: 11909, Bandwidth: 48.7821 MB/s
+Thread 0: Elapsed Time: 0.808843s, IOPS: 11375, Bandwidth: 46.594083 MB/s
+All Threads: Elapsed Time: 0.808843s, IOPS: 11375, Bandwidth: 46.5941 MB/s
 -----
-Thread 0: Elapsed Time: 1.306259s, IOPS: 11955, Bandwidth: 48.969778 MB/s
-All Threads: Elapsed Time: 1.30626s, IOPS: 11955, Bandwidth: 48.9698 MB/s
+Thread 0: Elapsed Time: 1.308957s, IOPS: 11351, Bandwidth: 46.493770 MB/s
+All Threads: Elapsed Time: 1.30896s, IOPS: 11351, Bandwidth: 46.4938 MB/s
 -----
-Thread 0: Elapsed Time: 1.806369s, IOPS: 12042, Bandwidth: 49.327900 MB/s
-All Threads: Elapsed Time: 1.80637s, IOPS: 12042, Bandwidth: 49.3279 MB/s
+Thread 0: Elapsed Time: 1.809068s, IOPS: 11344, Bandwidth: 46.467137 MB/s
+All Threads: Elapsed Time: 1.80907s, IOPS: 11344, Bandwidth: 46.4671 MB/s
 -----
-Thread 0: Elapsed Time: 2.306472s, IOPS: 12107, Bandwidth: 49.591235 MB/s
-All Threads: Elapsed Time: 2.30647s, IOPS: 12107, Bandwidth: 49.5912 MB/s
+Thread 0: Elapsed Time: 2.309175s, IOPS: 11398, Bandwidth: 46.686250 MB/s
+All Threads: Elapsed Time: 2.30917s, IOPS: 11398, Bandwidth: 46.6863 MB/s
 -----
-Thread 0: Elapsed Time: 2.806582s, IOPS: 12135, Bandwidth: 49.705140 MB/s
-All Threads: Elapsed Time: 2.80658s, IOPS: 12135, Bandwidth: 49.7051 MB/s
+Thread 0: Elapsed Time: 2.809288s, IOPS: 11304, Bandwidth: 46.302355 MB/s
+All Threads: Elapsed Time: 2.80929s, IOPS: 11304, Bandwidth: 46.3024 MB/s
 -----
-Thread 0: Elapsed Time: 3.306685s, IOPS: 12173, Bandwidth: 49.862750 MB/s
-All Threads: Elapsed Time: 3.30668s, IOPS: 12173, Bandwidth: 49.8627 MB/s
+Thread 0: Elapsed Time: 3.309393s, IOPS: 11305, Bandwidth: 46.305670 MB/s
+All Threads: Elapsed Time: 3.30939s, IOPS: 11305, Bandwidth: 46.3057 MB/s
 -----
-Thread 0: Elapsed Time: 3.806795s, IOPS: 12169, Bandwidth: 49.847573 MB/s
-All Threads: Elapsed Time: 3.80679s, IOPS: 12169, Bandwidth: 49.8476 MB/s
+Thread 0: Elapsed Time: 3.809498s, IOPS: 11283, Bandwidth: 46.218866 MB/s
+All Threads: Elapsed Time: 3.8095s, IOPS: 11283, Bandwidth: 46.2189 MB/s
 -----
-Thread 0: Elapsed Time: 4.306898s, IOPS: 12173, Bandwidth: 49.862631 MB/s
-All Threads: Elapsed Time: 4.3069s, IOPS: 12173, Bandwidth: 49.8626 MB/s
+Thread 0: Elapsed Time: 4.309600s, IOPS: 11322, Bandwidth: 46.378436 MB/s
+All Threads: Elapsed Time: 4.3096s, IOPS: 11322, Bandwidth: 46.3784 MB/s
 -----
-Thread 0: Elapsed Time: 4.807027s, IOPS: 12118, Bandwidth: 49.636558 MB/s
-All Threads: Elapsed Time: 4.80703s, IOPS: 12118, Bandwidth: 49.6366 MB/s
+Thread 0: Elapsed Time: 4.809720s, IOPS: 11330, Bandwidth: 46.410977 MB/s
+All Threads: Elapsed Time: 4.80972s, IOPS: 11330, Bandwidth: 46.411 MB/s
 -----
-Thread 0: Elapsed Time: 5.307127s, IOPS: 12087, Bandwidth: 49.509706 MB/s
-All Threads: Elapsed Time: 5.30713s, IOPS: 12087, Bandwidth: 49.5097 MB/s
+Thread 0: Elapsed Time: 5.309828s, IOPS: 11374, Bandwidth: 46.587918 MB/s
+All Threads: Elapsed Time: 5.30983s, IOPS: 11374, Bandwidth: 46.5879 MB/s
 -----
-Thread 0: Elapsed Time: 5.807238s, IOPS: 12087, Bandwidth: 49.510407 MB/s
-All Threads: Elapsed Time: 5.80724s, IOPS: 12087, Bandwidth: 49.5104 MB/s
+Thread 0: Elapsed Time: 5.809937s, IOPS: 11392, Bandwidth: 46.662478 MB/s
+All Threads: Elapsed Time: 5.80994s, IOPS: 11392, Bandwidth: 46.6625 MB/s
 -----
-Thread 0: Elapsed Time: 6.307341s, IOPS: 12093, Bandwidth: 49.533140 MB/s
-All Threads: Elapsed Time: 6.30734s, IOPS: 12093, Bandwidth: 49.5331 MB/s
+Thread 0: Elapsed Time: 6.310041s, IOPS: 11420, Bandwidth: 46.777186 MB/s
+All Threads: Elapsed Time: 6.31004s, IOPS: 11420, Bandwidth: 46.7772 MB/s
 -----
-Thread 0: Elapsed Time: 6.807453s, IOPS: 12108, Bandwidth: 49.595185 MB/s
-All Threads: Elapsed Time: 6.80745s, IOPS: 12108, Bandwidth: 49.5952 MB/s
+Thread 0: Elapsed Time: 6.810153s, IOPS: 11437, Bandwidth: 46.846721 MB/s
+All Threads: Elapsed Time: 6.81015s, IOPS: 11437, Bandwidth: 46.8467 MB/s
 -----
-Thread 0: Elapsed Time: 7.307557s, IOPS: 12102, Bandwidth: 49.570322 MB/s
-All Threads: Elapsed Time: 7.30756s, IOPS: 12102, Bandwidth: 49.5703 MB/s
+Thread 0: Elapsed Time: 7.310256s, IOPS: 11456, Bandwidth: 46.925853 MB/s
+All Threads: Elapsed Time: 7.31026s, IOPS: 11456, Bandwidth: 46.9259 MB/s
 -----
-Thread 0: Elapsed Time: 7.807673s, IOPS: 12089, Bandwidth: 49.516565 MB/s
-All Threads: Elapsed Time: 7.80767s, IOPS: 12089, Bandwidth: 49.5166 MB/s
+Thread 0: Elapsed Time: 7.810369s, IOPS: 11447, Bandwidth: 46.889906 MB/s
+All Threads: Elapsed Time: 7.81037s, IOPS: 11447, Bandwidth: 46.8899 MB/s
 -----
-Thread 0: Elapsed Time: 8.307773s, IOPS: 12083, Bandwidth: 49.492055 MB/s
-All Threads: Elapsed Time: 8.30777s, IOPS: 12083, Bandwidth: 49.4921 MB/s
+Thread 0: Elapsed Time: 8.310469s, IOPS: 11456, Bandwidth: 46.925878 MB/s
+All Threads: Elapsed Time: 8.31047s, IOPS: 11456, Bandwidth: 46.9259 MB/s
 -----
-Thread 0: Elapsed Time: 8.807890s, IOPS: 12061, Bandwidth: 49.402340 MB/s
-All Threads: Elapsed Time: 8.80789s, IOPS: 12061, Bandwidth: 49.4023 MB/s
+Thread 0: Elapsed Time: 8.810587s, IOPS: 11469, Bandwidth: 46.978592 MB/s
+All Threads: Elapsed Time: 8.81059s, IOPS: 11469, Bandwidth: 46.9786 MB/s
 -----
-Thread 0: Elapsed Time: 9.307985s, IOPS: 12068, Bandwidth: 49.430630 MB/s
-All Threads: Elapsed Time: 9.30799s, IOPS: 12068, Bandwidth: 49.4306 MB/s
+Thread 0: Elapsed Time: 9.310696s, IOPS: 11476, Bandwidth: 47.009413 MB/s
+All Threads: Elapsed Time: 9.3107s, IOPS: 11476, Bandwidth: 47.0094 MB/s
 -----
-Thread 0: Elapsed Time: 9.808098s, IOPS: 12079, Bandwidth: 49.478084 MB/s
-All Threads: Elapsed Time: 9.8081s, IOPS: 12079, Bandwidth: 49.4781 MB/s
+Thread 0: Elapsed Time: 9.810811s, IOPS: 11489, Bandwidth: 47.062533 MB/s
+All Threads: Elapsed Time: 9.81081s, IOPS: 11489, Bandwidth: 47.0625 MB/s
 -----
-Thread 0: Elapsed Time: 10.308193s, IOPS: 12082, Bandwidth: 49.490419 MB/s
-All Threads: Elapsed Time: 10.3082s, IOPS: 12082, Bandwidth: 49.4904 MB/s
+Thread 0: Elapsed Time: 10.310918s, IOPS: 11497, Bandwidth: 47.093847 MB/s
+All Threads: Elapsed Time: 10.3109s, IOPS: 11497, Bandwidth: 47.0938 MB/s
 -----
-Thread 0: Elapsed Time: 10.808307s, IOPS: 12086, Bandwidth: 49.507212 MB/s
-All Threads: Elapsed Time: 10.8083s, IOPS: 12086, Bandwidth: 49.5072 MB/s
+Thread 0: Elapsed Time: 10.811031s, IOPS: 11507, Bandwidth: 47.133227 MB/s
+All Threads: Elapsed Time: 10.811s, IOPS: 11507, Bandwidth: 47.1332 MB/s
 -----
-Thread 0: Elapsed Time: 11.308424s, IOPS: 12085, Bandwidth: 49.501861 MB/s
-All Threads: Elapsed Time: 11.3084s, IOPS: 12085, Bandwidth: 49.5019 MB/s
+Thread 0: Elapsed Time: 11.311145s, IOPS: 11512, Bandwidth: 47.155362 MB/s
+All Threads: Elapsed Time: 11.3111s, IOPS: 11512, Bandwidth: 47.1554 MB/s
 -----
-Thread 0: Elapsed Time: 11.808541s, IOPS: 12091, Bandwidth: 49.527138 MB/s
-All Threads: Elapsed Time: 11.8085s, IOPS: 12091, Bandwidth: 49.5271 MB/s
+Thread 0: Elapsed Time: 11.811258s, IOPS: 11514, Bandwidth: 47.164871 MB/s
+All Threads: Elapsed Time: 11.8113s, IOPS: 11514, Bandwidth: 47.1649 MB/s
 -----
-Thread 0: Elapsed Time: 12.308642s, IOPS: 12100, Bandwidth: 49.564405 MB/s
-All Threads: Elapsed Time: 12.3086s, IOPS: 12100, Bandwidth: 49.5644 MB/s
+Thread 0: Elapsed Time: 12.311366s, IOPS: 11505, Bandwidth: 47.128385 MB/s
+All Threads: Elapsed Time: 12.3114s, IOPS: 11505, Bandwidth: 47.1284 MB/s
 -----
-Thread 0: Elapsed Time: 12.808765s, IOPS: 12086, Bandwidth: 49.505940 MB/s
-All Threads: Elapsed Time: 12.8088s, IOPS: 12086, Bandwidth: 49.5059 MB/s
+Thread 0: Elapsed Time: 12.811495s, IOPS: 11508, Bandwidth: 47.138149 MB/s
+All Threads: Elapsed Time: 12.8115s, IOPS: 11508, Bandwidth: 47.1381 MB/s
 -----
-Thread 0: Elapsed Time: 13.308828s, IOPS: 12094, Bandwidth: 49.538881 MB/s
-All Threads: Elapsed Time: 13.3088s, IOPS: 12094, Bandwidth: 49.5389 MB/s
+Thread 0: Elapsed Time: 13.311622s, IOPS: 11519, Bandwidth: 47.185647 MB/s
+All Threads: Elapsed Time: 13.3116s, IOPS: 11519, Bandwidth: 47.1856 MB/s
 -----
-Thread 0: Elapsed Time: 13.808959s, IOPS: 12099, Bandwidth: 49.557624 MB/s
-All Threads: Elapsed Time: 13.809s, IOPS: 12099, Bandwidth: 49.5576 MB/s
+Thread 0: Elapsed Time: 13.811744s, IOPS: 11524, Bandwidth: 47.205407 MB/s
+All Threads: Elapsed Time: 13.8117s, IOPS: 11524, Bandwidth: 47.2054 MB/s
 -----
-Thread 0: Elapsed Time: 14.309061s, IOPS: 12107, Bandwidth: 49.592617 MB/s
-All Threads: Elapsed Time: 14.3091s, IOPS: 12107, Bandwidth: 49.5926 MB/s
+Thread 0: Elapsed Time: 14.311852s, IOPS: 11530, Bandwidth: 47.228696 MB/s
+All Threads: Elapsed Time: 14.3119s, IOPS: 11530, Bandwidth: 47.2287 MB/s
 -----
-Thread 0: Elapsed Time: 14.809173s, IOPS: 12112, Bandwidth: 49.611112 MB/s
-All Threads: Elapsed Time: 14.8092s, IOPS: 12112, Bandwidth: 49.6111 MB/s
+Thread 0: Elapsed Time: 14.811963s, IOPS: 11534, Bandwidth: 47.244319 MB/s
+All Threads: Elapsed Time: 14.812s, IOPS: 11534, Bandwidth: 47.2443 MB/s
 -----
-Thread 0: Elapsed Time: 15.309286s, IOPS: 11868, Bandwidth: 48.611969 MB/s
-All Threads: Elapsed Time: 15.3093s, IOPS: 11868, Bandwidth: 48.612 MB/s
+Thread 0: Elapsed Time: 15.312076s, IOPS: 11302, Bandwidth: 46.295644 MB/s
+All Threads: Elapsed Time: 15.3121s, IOPS: 11302, Bandwidth: 46.2956 MB/s
 -----
-Total I/O Completed: 181693
-Total Data Size: 744.215 MB
+Total I/O Completed: 173067
+Total Data Size: 708.882 MB
 Total Time: 15.0001 seconds
-Throughput: 12112.8 IOPS
-Bandwidth: 49.6141 MB/s
+Throughput: 11537.7 IOPS
+Bandwidth: 47.2586 MB/s
