@@ -10,6 +10,9 @@ import argparse
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "monitoring_logs")
 DURATION = 15  # Benchmark duration in seconds
 MONITOR_DURATION = DURATION + 5  # 3 seconds before + buffer
+cur_dir = os.path.dirname(os.path.realpath(__file__))
+executable_location = os.path.join(cur_dir[:-7], 'build', 'io_benchmark')
+
 
 # Function to run a command and log its output
 def run_command(command, log_file):
@@ -152,7 +155,7 @@ def main():
 
     # Run benchmark
     benchmark_cmd = [
-        "/home/tarun/io-microbenchmark/build/io_benchmark",
+        executable_location,
         "--engine=io_uring",
         f"--location=/dev/{device}",
         "--time",
