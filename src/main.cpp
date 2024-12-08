@@ -33,57 +33,52 @@ void print_stats_thread(benchmark_params &params,
         std::cout << "-----" << std::endl;
     }
 
-    while (print) 
+    std::vector<uint64_t> last_io_count(params.threads, 0); // Store last recorded I/O count
+
+while (print) 
+{
+    std::this_thread::sleep_for(interval);
+
+    uint64_t current_time = get_current_time_ns();
+
+    double bandwidth_sum = 0;
+
+    // Calculate and store stats for each thread
+    for (size_t i = 0; i < params.threads; ++i) 
     {
-        std::this_thread::sleep_for(interval);
+        const auto &stats = thread_stats_list[i];
 
-        uint64_t current_time = get_current_time_ns();
+        // Compute the number of I/Os since the last interval
+        uint64_t io_diff = stats.io_completed - last_io_count[i];
+        last_io_count[i] = stats.io_completed; // Update last recorded value
 
-        double io_sum = 0;
-        double bandwidth_sum = 0;
+        // Calculate bandwidth for this interval (MB/s)
+        double bandwidth = static_cast<double>(io_diff * params.page_size) / (interval.count() * KILO * KILO);
 
-        // Calculate and store stats for each thread
-        for (size_t i = 0; i < params.threads; ++i) 
-        {
-            const auto &stats = thread_stats_list[i];
+        bandwidth_sum += bandwidth;
 
-            // Calculate time elapsed in seconds
-            double time_elapsed = (current_time - stats.start_time) / 1e9;
-
-            // Compute throughput (IOPS) and bandwidth (MB/s)
-            double throughput = static_cast<double>(stats.io_completed) / time_elapsed;
-            double bandwidth = static_cast<double>(stats.io_completed * params.page_size) / (time_elapsed * KILO * KILO);
-
-            io_sum += throughput;
-            bandwidth_sum += bandwidth;
-
-            // Update the output for the current thread
-            thread_outputs[i] = "Thread " + std::to_string(i) + 
-                                ": Elapsed Time: " + std::to_string(static_cast<double>(time_elapsed)) + "s, IOPS: " + 
-                                std::to_string(static_cast<int>(throughput)) + 
-                                ", Bandwidth: " + 
-                                std::to_string(bandwidth) + " MB/s";
-        }
-
-        // Print outputs based on the selected mode
-        if (print_mode == PrintMode::Individual || print_mode == PrintMode::Both) {
-            for (const auto &output : thread_outputs) {
-                std::cout << output << std::endl;
-            }
-        }
-
-
-        if (print_mode == PrintMode::Cumulative || print_mode == PrintMode::Both) {
-            double total_time_elapsed = (current_time - thread_stats_list[0].start_time) / 1e9;
-            std::cout << "All Threads: Elapsed Time: " 
-                      << static_cast<double>(total_time_elapsed) << "s, IOPS: " 
-                      << static_cast<int>(io_sum) << ", Bandwidth: " 
-                      << bandwidth_sum << " MB/s" << std::endl;
-        }
-
-        std::cout << "-----" << std::endl;
-
+        // Update the output for the current thread
+        thread_outputs[i] = "Thread " + std::to_string(i) + 
+                            ": IOPS: " + std::to_string(io_diff) + 
+                            ", Bandwidth: " + std::to_string(bandwidth) + " MB/s";
     }
+
+    // Print outputs based on the selected mode
+    if (print_mode == PrintMode::Individual || print_mode == PrintMode::Both) {
+        for (const auto &output : thread_outputs) {
+            std::cout << output << std::endl;
+        }
+    }
+
+    if (print_mode == PrintMode::Cumulative || print_mode == PrintMode::Both) {
+        std::cout << "All Threads: IOPS: " 
+                  << std::accumulate(last_io_count.begin(), last_io_count.end(), 0) 
+                  << ", Bandwidth: " << bandwidth_sum << " MB/s" << std::endl;
+    }
+
+    std::cout << "-----" << std::endl;
+}
+
 }
 
 
