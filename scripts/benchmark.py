@@ -7,7 +7,7 @@ import numpy as np
 from brokenaxes import brokenaxes
 import matplotlib
 
-def run_benchmark(queue_depths, rw_types, duration, access_methods, thread_counts, engines, num_runs, csv_file):
+def run_benchmark(queue_depths, rw_types, duration, access_methods, thread_counts, engines, num_runs, csv_file, page_size):
     """
     Runs the io_benchmark command with different parameters and collects the results.
 
@@ -67,6 +67,7 @@ def run_benchmark(queue_depths, rw_types, duration, access_methods, thread_count
                                     f'--queue_depth={qd}',
                                     f'--method={method}',
                                     f'--type={rw}',
+                                    f'--page_size={page_size}',
                                     '--time',
                                     f'--duration={duration}',
                                     '-y'
@@ -130,8 +131,8 @@ def parse_output(output):
     return iops, bandwidth
 
 
-def plot_threads_qd(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths, duration):
-    fig_size = (6, 6)
+def plot_threads_qd(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths, duration, page_size):
+    fig_size = (7, 7)
 
     df = pd.read_csv(csv_file)
     grouped = df.groupby(['engine', 'rw', 'runtime', 'method', 'threads', 'queue_depth']).mean().reset_index()
@@ -178,41 +179,44 @@ def plot_threads_qd(csv_file, thread_counts, rw_types, access_methods, engines, 
 
             # Set up titles, labels, and legends for IOPS
             ax_iops.set_title(f'IOPS - {rw.capitalize()} {method.capitalize()}')
+            ax_iops.set_xlim(left=0)
+            ax_iops.set_ylim(bottom=0)
             ax_iops.set_xlabel('Number of Threads')
             ax_iops.set_ylabel('IOPS')
 
             # Set up titles, labels, and legends for Bandwidth
             ax_bandwidth.set_title(f'Bandwidth - {rw.capitalize()} {method.capitalize()}')
+            ax_bandwidth.set_xlim(left=0)
+            ax_bandwidth.set_ylim(bottom=0)
             ax_bandwidth.set_xlabel('Number of Threads')
             ax_bandwidth.set_ylabel('Bandwidth (MB/s)')
 
             # create a svg for just the legend
             cur_dir = os.path.dirname(os.path.realpath(__file__))
 
-            fig_legend = plt.figure(figsize=(10, 10))
+            fig_legend = plt.figure(figsize=fig_size)
             ax_legend = fig_legend.add_subplot(111)
             ax_legend.axis('off')
             ax_legend.legend(*ax_iops.get_legend_handles_labels(), loc='center', ncol=3)
-            fig_legend.savefig(os.path.join(cur_dir, 'results', f'legend_{rw}_{method}.svg'), transparent=True)
+            fig_legend.savefig(os.path.join(cur_dir, 'results', f'legend_{rw}_{method}_{page_size}.svg'), transparent=True)
             plt.close(fig_legend)
 
             # Save figures
             os.makedirs(os.path.join(cur_dir, 'results'), exist_ok=True)
-            fig.savefig(os.path.join(cur_dir, 'results', f'iops_{rw}_{method}.svg'), transparent=True)
-            fig_bandwidth.savefig(os.path.join(cur_dir, 'results', f'bandwidth_{rw}_{method}.svg'), transparent=True)
+            fig.savefig(os.path.join(cur_dir, 'results', f'iops_{rw}_{method}_{page_size}.svg'), transparent=True)
+            fig_bandwidth.savefig(os.path.join(cur_dir, 'results', f'bandwidth_{rw}_{method}_{page_size}.svg'), transparent=True)
 
             plt.close(fig)
             plt.close(fig_bandwidth)
 
 
 
-def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines, duration):
-    fig_size = (10, 10)
+def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines, duration, page_size):
+    fig_size = (7, 14)
 
     df = pd.read_csv(csv_file)
     grouped = df.groupby(['engine', 'rw', 'runtime',  'method', 'threads', 'queue_depth']).mean().reset_index()
 
-    max_offset = 0.01  # Maximum offset as a fraction of the data point value
 
     for threads in thread_counts:
         fig, axes = plt.subplots(len(rw_types), len(access_methods), figsize=fig_size, squeeze=False)
@@ -246,50 +250,25 @@ def plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts
                     ax.plot(qd_list, iops_list, linestyle='-', marker='o', label=engine, color=color)
                     ax_bandwidth.plot(qd_list, bandwidth_list, linestyle='-', marker='o', label=engine, color=color)
 
-                    # # Annotate improvement factors for IOPS
-                    # for idx in range(1, len(qd_list)):
-                    #     if iops_list[idx - 1] > 0:  # Avoid division by zero
-                    #         improvement_factor_iops = iops_list[idx] / iops_list[idx - 1]
-                    #         offset = min(max_offset * iops_list[idx], 10)  # Constrain the offset
-                    #         ax.annotate(
-                    #             f"{improvement_factor_iops:.3f}x",
-                    #             xy=(qd_list[idx], iops_list[idx]),
-                    #             xytext=(qd_list[idx], iops_list[idx] + offset),
-                    #             fontsize=10,
-                    #             color=color,  # Use the same color
-                    #             ha='center'
-                    #         )
-
-                    # # Annotate improvement factors for Bandwidth
-                    # for idx in range(1, len(qd_list)):
-                    #     if bandwidth_list[idx - 1] > 0:  # Avoid division by zero
-                    #         improvement_factor_bandwidth = bandwidth_list[idx] / bandwidth_list[idx - 1]
-                    #         offset = min(max_offset * bandwidth_list[idx], 10)  # Constrain the offset
-                    #         ax_bandwidth.annotate(
-                    #             f"{improvement_factor_bandwidth:.3f}x",
-                    #             xy=(qd_list[idx], bandwidth_list[idx]),
-                    #             xytext=(qd_list[idx], bandwidth_list[idx] + offset),
-                    #             fontsize=10,
-                    #             color=color,  # Use the same color
-                    #             ha='center'
-                    #         )
 
                 ax.set_title(f'IOPS - {rw.capitalize()} {method.capitalize()}')
+                ax.set_xlim(left=0)
+                ax.set_ylim(bottom=0)
                 ax.set_xlabel('Queue Depth')
                 ax.set_ylabel('IOPS')
-                ax.set_xscale('log', base=2)
                 ax.legend()
 
-                ax_bandwidth.set_xscale('log', base=2)
                 ax_bandwidth.set_title(f'Bandwidth - {rw.capitalize()} {method.capitalize()}')
+                ax_bandwidth.set_xlim(left=0)
+                ax_bandwidth.set_ylim(bottom=0)
                 ax_bandwidth.set_xlabel('Queue Depth')
                 ax_bandwidth.set_ylabel('Bandwidth (MB/s)')
                 ax_bandwidth.legend()
 
         cur_dir = os.path.dirname(os.path.realpath(__file__))
         os.makedirs(os.path.join(cur_dir, 'results'), exist_ok=True)
-        fig.savefig(os.path.join(cur_dir, 'results', f'iops_threads_{threads}.svg'), transparent=True)
-        fig_bandwidth.savefig(os.path.join(cur_dir, 'results', f'bandwidth_threads_{threads}.svg'), transparent=True)
+        fig.savefig(os.path.join(cur_dir, 'results', f'iops_threads_{threads}_{page_size}.svg'), transparent=True)
+        fig_bandwidth.savefig(os.path.join(cur_dir, 'results', f'bandwidth_threads_{threads}_{page_size}.svg'), transparent=True)
 
         plt.close(fig)
         plt.close(fig_bandwidth)
@@ -321,27 +300,48 @@ def test():
 
 
 def main():
-    queue_depths = [1, 2, 4, 32, 64, 128, 512]
-    rw_types = ['read', 'write']
-    access_methods = ['rand', 'seq']
-    thread_counts = [1,2,4]
+    # queue_depths = [1, 2, 4, 8,16, 32, 64, 128, 256]
+    queue_depths = [1, 2, 4, 32, 128]
+    thread_counts = [1,2,4,8,16,24,48]
     engines = ['sync', 'liburing', 'io_uring']
     num_runs = 1
-    duration = 5
+    duration = 15
+    rw_types = ['read', 'write']
+    
+    
+    access_methods = ['rand']
+    page = 4096
 
     # if results folder does not exist where the script is located, create it
     if not os.path.exists(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results')):
         os.makedirs(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results'))
 
     cur_dir = os.path.dirname(os.path.realpath(__file__))
-    csv_file = os.path.join(cur_dir, 'results', 'benchmark_results.csv')
+    csv_file = os.path.join(cur_dir, 'results', f'benchmark_results_{page}.csv')
 
-    run_benchmark(queue_depths, rw_types, duration, access_methods, thread_counts, engines, num_runs, csv_file)
+    run_benchmark(queue_depths, rw_types, duration, access_methods, thread_counts, engines, num_runs, csv_file, page)
 
     # Plot results
-    # plot_threads_qd(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths)
-    plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines, duration)
+    plot_threads_qd(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths, duration, page)
+    plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines, duration, page)
 
+
+
+    access_methods = ['seq']
+    page = 1024 * 128
+
+    # if results folder does not exist where the script is located, create it
+    if not os.path.exists(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results')):
+        os.makedirs(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results'))
+
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    csv_file = os.path.join(cur_dir, 'results', f'benchmark_results_{page}.csv')
+
+    run_benchmark(queue_depths, rw_types, duration, access_methods, thread_counts, engines, num_runs, csv_file, page)
+
+    # Plot results
+    plot_threads_qd(csv_file, thread_counts, rw_types, access_methods, engines, queue_depths, duration, page)
+    plot_results(csv_file, queue_depths, rw_types, access_methods, thread_counts, engines, duration, page)
 
 if __name__ == '__main__':
     main()

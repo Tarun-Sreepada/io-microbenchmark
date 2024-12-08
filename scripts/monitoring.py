@@ -75,27 +75,22 @@ def read_benchmark_log(file_path):
 
 # Plotting function
 def plot_logs(io_df, sar_df, benchmark_df, method, type):
-    # set figure size
-    plt.figure(figsize=(8, 12))
-    
-    # offset the df by 3 seconds
+    # Offset the DataFrame indices by 2 seconds
     io_df.index = io_df.index - 2
     sar_df.index = sar_df.index - 2
-    
-    # take iodf and benchmark df convert ot MB/s
-    # io_df["rMB/s"] = io_df["rkB/s"] / 1024
+
+    # Convert to MB/s
     if type == "read":
         io_df["rMB/s"] = io_df["rkB/s"] / 1024
     else:
         io_df["wMB/s"] = io_df["wkB/s"] / 1024
-    
     benchmark_df["Bandwidth (MB/s)"] = benchmark_df["Bandwidth (KB/s)"] / 1024
-    
-    
-    fig, axes = plt.subplots(3, 1, figsize=(12, 16), sharex=True)
 
+    # Create subplots with specific size
+    fig, axes = plt.subplots(3, 1, figsize=(6, 8), sharex=True)
+
+    # Bandwidth plot
     axes[0].set_title("Bandwidth (MB/s)")
-    # axes[0].plot(io_df.index, io_df["rMB/s"], label="iostat rMB/s", color="blue", linewidth=2)
     if type == "read":
         axes[0].plot(io_df.index, io_df["rMB/s"], label="iostat rMB/s", color="blue", linewidth=2)
     else:
@@ -104,21 +99,21 @@ def plot_logs(io_df, sar_df, benchmark_df, method, type):
     axes[0].set_ylabel("Bandwidth (MB/s)")
     axes[0].legend()
     axes[0].grid(True)
-    
 
-    # Middle plot: IOPS (Benchmark and Iostat r/s)
+    # IOPS plot
     axes[1].set_title("IOPS (Operations per Second)")
-    # axes[1].plot(io_df.index, io_df["r/s"], label="iostat r/s", color="blue", linewidth=2)
     if type == "read":
         axes[1].plot(io_df.index, io_df["r/s"], label="iostat r/s", color="blue", linewidth=2)
+        axes[1].plot(io_df.index, io_df["rrqm/s"], label="iostat rrqm/s", color="red", linewidth=2)
     else:
         axes[1].plot(io_df.index, io_df["w/s"], label="iostat w/s", color="blue", linewidth=2)
+        axes[1].plot(io_df.index, io_df["wrqm/s"], label="iostat wrqm/s", color="red", linewidth=2)
     axes[1].plot(benchmark_df.index, benchmark_df["IOPS"], label="Benchmark IOPS", color="orange", linewidth=2)
     axes[1].set_ylabel("IOPS")
     axes[1].legend()
     axes[1].grid(True)
 
-    # Bottom plot: CPU usage
+    # CPU usage plot
     axes[2].set_title("CPU Usage (SAR)")
     cumulative_bottom = None
     for column in sar_df.columns:
@@ -133,9 +128,11 @@ def plot_logs(io_df, sar_df, benchmark_df, method, type):
     axes[2].legend()
     axes[2].grid(True)
 
+    # Adjust layout and save figure
     plt.tight_layout()
     plt.savefig(os.path.join(OUTPUT_DIR, f"io_cpu_usage_{method}_{type}.svg"), transparent=True)
     plt.close()
+
 
 # Main script execution
 def main():
@@ -198,9 +195,9 @@ def main():
     # Process logs and plot
     # io_df = read_iostat_log(iostat_log, plot=["r/s", "rkB/s"])
     if b_type == "read":
-        io_df = read_iostat_log(iostat_log, plot=["r/s", "rkB/s"])
+        io_df = read_iostat_log(iostat_log, plot=["r/s", "rkB/s", "rrqm/s"])
     else:
-        io_df = read_iostat_log(iostat_log, plot=["w/s", "wkB/s"])
+        io_df = read_iostat_log(iostat_log, plot=["w/s", "wkB/s", "wrqm/s"])
     sar_df = read_sar_log(sar_log)
     benchmark_df = read_benchmark_log(benchmark_output)
     
