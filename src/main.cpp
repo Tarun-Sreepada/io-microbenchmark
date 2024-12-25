@@ -53,13 +53,14 @@ while (print)
         last_io_count[i] = stats.io_completed; // Update last recorded value
 
         // Calculate bandwidth for this interval (MB/s)
-        double bandwidth = static_cast<double>(io_diff * params.page_size) / (interval.count() * KILO * KILO);
+        double bandwidth = static_cast<double>(io_diff * params.page_size) / (interval.count() / 1000 * KILO * KILO);
+
 
         bandwidth_sum += bandwidth;
 
         // Update the output for the current thread
-        thread_outputs[i] = "Thread " + std::to_string(i) + 
-                            ": IOPS: " + std::to_string(io_diff) + 
+        thread_outputs[i] = "Thread " + std::to_string(i) + ": Elapsed Time: " + std::to_string((current_time - stats.start_time) / 1e9) + "s" +
+                            ", IOPS: " + std::to_string(io_diff) + 
                             ", Bandwidth: " + std::to_string(bandwidth) + " MB/s";
     }
 
@@ -92,7 +93,7 @@ int main(int argc, char *argv[])
 
     // launch a thread that constantly prints statistics every second
     print = true;
-    std::thread stats_thread(print_stats_thread, std::ref(params), std::ref(thread_stats_list), std::chrono::milliseconds(500), PrintMode::Both);
+    std::thread stats_thread(print_stats_thread, std::ref(params), std::ref(thread_stats_list), std::chrono::milliseconds(1000), PrintMode::Both);
 
 
     for (uint64_t i = 0; i < params.threads; ++i)

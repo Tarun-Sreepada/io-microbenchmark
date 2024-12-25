@@ -155,7 +155,6 @@ def main():
     
     # MONITOR_DURATION = DURATION + 5  # 3 seconds before + buffer
     
-
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     iostat_log = os.path.join(OUTPUT_DIR, f"iostat_{device}.log")
@@ -171,6 +170,7 @@ def main():
 
     # Run benchmark
     benchmark_cmd = [
+        "sudo",
         executable_location,
         "--engine=io_uring",
         f"--location=/dev/{device}",
@@ -186,7 +186,7 @@ def main():
     with open(benchmark_output, "w") as f:
         subprocess.run(benchmark_cmd, stdout=f, stderr=subprocess.STDOUT)
 
-    # Wait for monitoring processes
+    # # Wait for monitoring processes
     iostat_process.wait()
     sar_process.wait()
 
