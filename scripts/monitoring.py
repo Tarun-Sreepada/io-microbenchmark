@@ -49,7 +49,8 @@ def read_iostat_log(file_path, plot=[]):
                 continue
             line = re.sub(' +', ' ', line)
             iostat_lines.append(line.split())
-    iostat_lines = [line for line in iostat_lines if not re.match(r".*AM|PM.*", line[2])]
+            # 9時52分17秒
+    iostat_lines = [line for line in iostat_lines if not re.match(r".*時.*", line[2])]
     header = iostat_lines[0]
     iostat_lines = [line for line in iostat_lines if line != header]
     iostat_df = pd.DataFrame(iostat_lines, columns=header)
